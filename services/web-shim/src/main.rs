@@ -25,7 +25,12 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn health() -> Json<serde_json::Value> {
-    Json(json!({"status":"ok","service":"agentspay-web-shim","version":env!("CARGO_PKG_VERSION")}))
+    Json(json!({
+        "status": "ok",
+        "service": "agentspay-web-shim",
+        "version": env!("CARGO_PKG_VERSION"),
+        "environment": std::env::var("AGENTSPAY_ENV").unwrap_or_else(|_| "sandbox".to_string()),
+    }))
 }
 
 fn init_tracing() {
@@ -33,6 +38,10 @@ fn init_tracing() {
         .unwrap_or_else(|_| EnvFilter::new("agentspay_web_shim=info,tower_http=info"));
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(false),
+        )
         .init();
 }
