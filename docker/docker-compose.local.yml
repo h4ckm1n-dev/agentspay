@@ -1,0 +1,15 @@
+services:
+  caddy:
+    profiles: [_disabled]
+
+  web:
+    ports:
+      - "3000:3000"
+
+  shim:
+    ports:
+      - "8080:8080"
+
+  paid-endpoint:
+    ports:
+      - "3001:3001"

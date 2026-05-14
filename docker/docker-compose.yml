@@ -1,0 +1,64 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+      - shim
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE: /api
+      AGENTSPAY_SHIM_URL: http://shim:8080
+
+  shim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.shim
+    restart: unless-stopped
+    environment:
+      AGENTSPAY_REDIS_URL: redis://redis:6379
+      AGENTSPAY_PAID_ENDPOINT_URL: http://paid-endpoint:3001
+      AGENTSPAY_DEVNET_WALLET_PATH: /data/devnet-wallet.json
+      AGENTSPAY_DEVNET_LEDGER_PATH: /data/devnet-ledger.db
+    volumes:
+      - wallet-data:/data
+    depends_on:
+      - redis
+      - paid-endpoint
+
+  paid-endpoint:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.paid-endpoint
+    restart: unless-stopped
+    environment:
+      AGENTSPAY_PROVIDER_KEYPAIR: /data/provider-keypair.json
+    volumes:
+      - wallet-data:/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  caddy-data:
+  caddy-config:
+  wallet-data:
+  redis-data:
