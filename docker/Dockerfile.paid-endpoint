@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.7
+FROM rust:1.83-slim AS builder
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      pkg-config libssl-dev ca-certificates protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+COPY Cargo.toml Cargo.lock ./
+COPY rust-toolchain.toml ./
+COPY packages packages
+COPY services services
+COPY examples examples
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release -p agentspay-paid-endpoint-demo \
+ && cp target/release/agentspay-paid-endpoint-demo /usr/local/bin/agentspay-paid-endpoint-demo
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/bin/agentspay-paid-endpoint-demo /usr/local/bin/agentspay-paid-endpoint-demo
+ENV RUST_LOG=agentspay_paid_endpoint_demo=info
+EXPOSE 3001
+ENTRYPOINT ["/usr/local/bin/agentspay-paid-endpoint-demo"]
