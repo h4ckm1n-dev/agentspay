@@ -16,6 +16,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 mod config;
 mod error;
 mod handlers;
+mod ratelimit;
 mod session;
 mod state;
 mod subprocess;
@@ -38,10 +39,16 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Arc::new(SessionStore::new_in_memory(config.session_ttl))
     };
+    let ratelimit = if let Some(url) = config.redis_url.as_deref() {
+        Arc::new(crate::ratelimit::RateLimit::redis(url).await?)
+    } else {
+        Arc::new(crate::ratelimit::RateLimit::in_memory())
+    };
     let state = AppState {
         config: Arc::new(config),
         sessions: sessions.clone(),
         http: reqwest::Client::new(),
+        ratelimit,
     };
 
     // Background sweep: every 60s, drop expired sessions and log if any were swept.

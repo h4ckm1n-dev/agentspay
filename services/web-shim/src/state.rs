@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::{config::Config, session::SessionStore};
+use crate::{config::Config, ratelimit::SharedRateLimit, session::SessionStore};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -11,4 +11,5 @@ pub struct AppState {
     /// Reused for Phase 2 outbound calls to the demo `paid-endpoint` provider.
     #[allow(dead_code)]
     pub http: reqwest::Client,
+    pub ratelimit: SharedRateLimit,
 }
