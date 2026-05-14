@@ -5,21 +5,39 @@
 //! over stdio, and exposes the responses as JSON over HTTPS. Holds the
 //! rate-limited devnet wallet for the one-click "trigger a real TX" demo.
 
-use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::{routing::get, Json, Router};
 use serde_json::json;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+mod config;
+mod error;
+mod session;
+mod state;
+
+use crate::{config::Config, session::SessionStore, state::AppState};
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
 
-    let app = Router::new().route("/api/health", get(health));
-    let addr: SocketAddr = "0.0.0.0:8080".parse()?;
-    tracing::info!(%addr, "agentspay-web-shim listening");
+    let config = Config::from_env()?;
+    let listen_addr = config.listen_addr;
+    let sessions = SessionStore::new_in_memory(config.session_ttl);
+    let state = AppState {
+        config: Arc::new(config),
+        sessions: Arc::new(sessions),
+        http: reqwest::Client::new(),
+    };
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let app = Router::new()
+        .route("/api/health", get(health))
+        .with_state(state);
+
+    tracing::info!(addr = %listen_addr, "agentspay-web-shim listening");
+
+    let listener = tokio::net::TcpListener::bind(listen_addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
 }
