@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package agentspay.common.v1;
+
+enum Environment {
+  ENVIRONMENT_UNSPECIFIED = 0;
+  ENVIRONMENT_SANDBOX = 1;
+  ENVIRONMENT_LIVE = 2;
+}
+
+message Money {
+  string amount = 1;
+  string currency = 2;
+}
+
+message AgentContext {
+  string organization_id = 1;
+  string agent_id = 2;
+  string endpoint_id = 3;
+  string budget_id = 4;
+  Environment environment = 5;
+}
+
+message PageRequest {
+  uint32 limit = 1;
+  string cursor = 2;
+}
+
+message PageResponse {
+  string next_cursor = 1;
+}

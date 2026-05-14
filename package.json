@@ -1,0 +1,19 @@
+{
+  "name": "agentspay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "x402-compatible payment and spend-control layer for autonomous AI agents.",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "pnpm -r format"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

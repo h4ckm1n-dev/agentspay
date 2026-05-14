@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentspay"
+version = "0.1.0"
+description = "Python SDK scaffold for AgentsPay payment flows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "AgentsPay" }
+]
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["agentspay*"]

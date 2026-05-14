@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package agentspay.metering.v1;
+
+import "agentspay/v1/common.proto";
+
+service MeteringService {
+  rpc RecordUsage(RecordUsageRequest) returns (RecordUsageResponse);
+  rpc GetEndpointPrice(GetEndpointPriceRequest) returns (GetEndpointPriceResponse);
+}
+
+message RecordUsageRequest {
+  string idempotency_key = 1;
+  string organization_id = 2;
+  string agent_id = 3;
+  string endpoint_id = 4;
+  uint64 units = 5;
+  agentspay.common.v1.Environment environment = 6;
+}
+
+message RecordUsageResponse {
+  string usage_event_id = 1;
+  string organization_id = 2;
+  string endpoint_id = 3;
+  uint64 units = 4;
+  agentspay.common.v1.Environment environment = 5;
+}
+
+message GetEndpointPriceRequest {
+  string endpoint_id = 1;
+  agentspay.common.v1.Environment environment = 2;
+}
+
+message GetEndpointPriceResponse {
+  string endpoint_id = 1;
+  string pricing_model = 2;
+  agentspay.common.v1.Money price = 3;
+  agentspay.common.v1.Environment environment = 4;
+}

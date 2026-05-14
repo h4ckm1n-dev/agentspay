@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package agentspay.auth.v1;
+
+import "agentspay/v1/common.proto";
+
+service AuthService {
+  rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
+  rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
+}
+
+message ValidateApiKeyRequest {
+  string api_key = 1;
+  string required_scope = 2;
+  agentspay.common.v1.Environment environment = 3;
+}
+
+message ValidateApiKeyResponse {
+  bool active = 1;
+  string organization_id = 2;
+  string api_key_id = 3;
+  repeated string scopes = 4;
+  agentspay.common.v1.Environment environment = 5;
+}
+
+message CreateAgentRequest {
+  string organization_id = 1;
+  string name = 2;
+  repeated string scopes = 3;
+  agentspay.common.v1.Environment environment = 4;
+  string idempotency_key = 5;
+}
+
+message CreateAgentResponse {
+  string agent_id = 1;
+  string organization_id = 2;
+  string name = 3;
+  repeated string scopes = 4;
+  agentspay.common.v1.Environment environment = 5;
+}

@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package agentspay.payment.v1;
+
+import "agentspay/v1/common.proto";
+
+service PaymentService {
+  rpc VerifyPayment(VerifyPaymentRequest) returns (VerifyPaymentResponse);
+  rpc SettlePayment(SettlePaymentRequest) returns (SettlePaymentResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+message PaymentRequirement {
+  string scheme = 1;
+  string network = 2;
+  agentspay.common.v1.Money amount = 3;
+  string pay_to = 4;
+  string resource = 5;
+  string description = 6;
+  string expires_at = 7;
+}
+
+message PaymentPayload {
+  string scheme = 1;
+  string network = 2;
+  agentspay.common.v1.Money amount = 3;
+  string payer = 4;
+  string payee = 5;
+  string nonce = 6;
+  string signature = 7;
+  string sandbox_proof = 8;
+}
+
+message VerifyPaymentRequest {
+  string idempotency_key = 1;
+  PaymentPayload payment_payload = 2;
+  PaymentRequirement payment_requirement = 3;
+  agentspay.common.v1.AgentContext context = 4;
+}
+
+message VerifyPaymentResponse {
+  bool valid = 1;
+  string payment_id = 2;
+  string authorization_id = 3;
+  string policy_decision_id = 4;
+  string audit_proof_id = 5;
+  string ledger_state = 6;
+  string reason = 7;
+  agentspay.common.v1.Environment environment = 8;
+}
+
+message SettlePaymentRequest {
+  string idempotency_key = 1;
+  string payment_id = 2;
+  string authorization_id = 3;
+  PaymentPayload payment_payload = 4;
+  PaymentRequirement payment_requirement = 5;
+  agentspay.common.v1.AgentContext context = 6;
+}
+
+message SettlePaymentResponse {
+  bool settled = 1;
+  string settlement_id = 2;
+  string transaction_id = 3;
+  string ledger_entry_id = 4;
+  string status = 5;
+  string audit_proof_id = 6;
+  agentspay.common.v1.Environment environment = 7;
+}
+
+message GetBalanceRequest {
+  string organization_id = 1;
+  string agent_id = 2;
+  agentspay.common.v1.Environment environment = 3;
+}
+
+message GetBalanceResponse {
+  agentspay.common.v1.Money available = 1;
+  agentspay.common.v1.Money pending = 2;
+  agentspay.common.v1.Environment environment = 3;
+}
