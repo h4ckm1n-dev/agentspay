@@ -103,6 +103,9 @@ mod tests {
         let store = SessionStore::new_in_memory(Duration::from_millis(10));
         let s = store.create().await.unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
-        assert!(store.get(&s.id).await.is_none(), "expired session must be gone");
+        assert!(
+            store.get(&s.id).await.is_none(),
+            "expired session must be gone"
+        );
     }
 }

@@ -6,12 +6,21 @@ use std::{env, net::SocketAddr, path::PathBuf, time::Duration};
 pub struct Config {
     pub listen_addr: SocketAddr,
     pub mcp_binary: PathBuf,
+    /// Used by Phase 2 webhook/server-side calls to the demo merchant.
+    #[allow(dead_code)]
     pub paid_endpoint_url: String,
+    /// Phase 3 mounts the rate-limited devnet wallet from here.
+    #[allow(dead_code)]
     pub devnet_wallet_path: PathBuf,
+    /// Phase 3 records real-tx audit entries here.
+    #[allow(dead_code)]
     pub devnet_ledger_path: PathBuf,
     pub session_ttl: Duration,
+    /// Phase 1 currently hardcodes 10s in the handler; Phase 2 will read this.
+    #[allow(dead_code)]
     pub subprocess_timeout: Duration,
     /// `None` → run with in-memory session+ratelimit stores. Phase 4 sets it.
+    #[allow(dead_code)]
     pub redis_url: Option<String>,
 }
 

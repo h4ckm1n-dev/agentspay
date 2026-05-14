@@ -10,6 +10,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Debug, Error)]
+#[allow(dead_code)] // RateLimited + WalletDrained land in Phase 2/3.
 pub enum ShimError {
     #[error("bad request: {0}")]
     BadRequest(String),

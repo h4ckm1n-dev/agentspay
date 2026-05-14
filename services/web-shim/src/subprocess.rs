@@ -18,6 +18,7 @@ use tokio::{
 use crate::error::ShimError;
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // `SolanaDevnet` is exercised in Phase 3.
 pub enum NetworkMode {
     Sandbox,
     SolanaDevnet,
@@ -86,7 +87,10 @@ pub async fn run(call: McpCall<'_>) -> Result<Value, ShimError> {
         .write_all(payload.as_bytes())
         .await
         .map_err(|e| ShimError::SubprocessFailed(format!("stdin write: {e}")))?;
-    drop(stdin);
+    // NOTE: we deliberately do NOT drop stdin here. The rmcp server treats
+    // stdin EOF as a shutdown signal and exits before async tool handlers
+    // finish. We hold stdin open for the duration of the read and kill the
+    // child once we have our response (or on timeout).
 
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
@@ -112,11 +116,16 @@ pub async fn run(call: McpCall<'_>) -> Result<Value, ShimError> {
         ))
     };
 
-    let result = timeout(call.timeout, read_fut)
-        .await
-        .map_err(|_| ShimError::SubprocessTimeout(call.timeout.as_secs()))?;
+    let result = timeout(call.timeout, read_fut).await;
 
-    // Reap the child; ignore non-zero exit since we already got our answer.
+    // We have our answer (or timed out). Drop stdin, then kill + reap the
+    // child so it never lingers past this request.
+    drop(stdin);
+    let _ = child.start_kill();
     let _ = child.wait().await;
-    result
+
+    match result {
+        Ok(inner) => inner,
+        Err(_) => Err(ShimError::SubprocessTimeout(call.timeout.as_secs())),
+    }
 }

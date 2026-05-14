@@ -8,5 +8,7 @@ use crate::{config::Config, session::SessionStore};
 pub struct AppState {
     pub config: Arc<Config>,
     pub sessions: Arc<SessionStore>,
+    /// Reused for Phase 2 outbound calls to the demo `paid-endpoint` provider.
+    #[allow(dead_code)]
     pub http: reqwest::Client,
 }

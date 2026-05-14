@@ -5,19 +5,27 @@
 //! over stdio, and exposes the responses as JSON over HTTPS. Holds the
 //! rate-limited devnet wallet for the one-click "trigger a real TX" demo.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use axum::{routing::get, Json, Router};
-use serde_json::json;
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod config;
 mod error;
+mod handlers;
 mod session;
 mod state;
 mod subprocess;
 
-use crate::{config::Config, session::SessionStore, state::AppState};
+use crate::{
+    config::Config,
+    handlers::{health, sandbox},
+    session::SessionStore,
+    state::AppState,
+};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -25,15 +33,20 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
     let listen_addr = config.listen_addr;
-    let sessions = SessionStore::new_in_memory(config.session_ttl);
+    let sessions = Arc::new(SessionStore::new_in_memory(config.session_ttl));
     let state = AppState {
         config: Arc::new(config),
-        sessions: Arc::new(sessions),
+        sessions: sessions.clone(),
         http: reqwest::Client::new(),
     };
 
+    // Background sweep: every 60s, drop expired sessions and log if any were swept.
+    tokio::spawn(sweep_loop(sessions));
+
     let app = Router::new()
-        .route("/api/health", get(health))
+        .route("/api/health", get(health::health))
+        .route("/api/sandbox/session", post(sandbox::create_session))
+        .route("/api/sandbox/call", post(sandbox::call_tool))
         .with_state(state);
 
     tracing::info!(addr = %listen_addr, "agentspay-web-shim listening");
@@ -43,13 +56,17 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn health() -> Json<serde_json::Value> {
-    Json(json!({
-        "status": "ok",
-        "service": "agentspay-web-shim",
-        "version": env!("CARGO_PKG_VERSION"),
-        "environment": std::env::var("AGENTSPAY_ENV").unwrap_or_else(|_| "sandbox".to_string()),
-    }))
+async fn sweep_loop(sessions: Arc<SessionStore>) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(60));
+    // First tick fires immediately — skip it so we don't log a no-op at startup.
+    ticker.tick().await;
+    loop {
+        ticker.tick().await;
+        let (active, swept) = sessions.sweep().await;
+        if swept > 0 {
+            tracing::info!(active, swept, "session sweep");
+        }
+    }
 }
 
 fn init_tracing() {
