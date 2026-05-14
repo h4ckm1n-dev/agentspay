@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AgentsPay Dashboard",
-  description: "Spend controls and x402-compatible payments for autonomous agents."
+  title: "AgentsPay — A budget-controlled USDC wallet for AI agents",
+  description:
+    "One MCP install. Real Solana settlement. Per-call and daily caps enforced before the chain.",
 };
 
-interface RootLayoutProps {
+export default function RootLayout({
+  children,
+}: {
   children: React.ReactNode;
-}
-
-export default function RootLayout({ children }: RootLayoutProps) {
+}) {
   return (
     <html lang="en">
       <body>{children}</body>

@@ -1,5 +1,13 @@
-import { AgentsPayDashboard } from "@/components/dashboard/agents-pay-dashboard";
+import { Hero } from "@/components/sections/Hero";
+import { Install } from "@/components/sections/Install";
+import { Footer } from "@/components/sections/Footer";
 
 export default function Home() {
-  return <AgentsPayDashboard />;
+  return (
+    <main>
+      <Hero />
+      <Install />
+      <Footer />
+    </main>
+  );
 }
