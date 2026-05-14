@@ -33,7 +33,11 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
     let listen_addr = config.listen_addr;
-    let sessions = Arc::new(SessionStore::new_in_memory(config.session_ttl));
+    let sessions = if let Some(url) = config.redis_url.as_deref() {
+        Arc::new(SessionStore::new_with_redis(config.session_ttl, url).await?)
+    } else {
+        Arc::new(SessionStore::new_in_memory(config.session_ttl))
+    };
     let state = AppState {
         config: Arc::new(config),
         sessions: sessions.clone(),

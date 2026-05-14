@@ -41,6 +41,9 @@ impl Session {
 pub struct SessionStore {
     inner: RwLock<HashMap<String, Arc<Session>>>,
     ttl: Duration,
+    // Phase 4: when Some, mirror create/get/expire into Redis so multiple
+    // shim replicas (or restarts) see the same sessions.
+    redis: Option<redis::aio::ConnectionManager>,
 }
 
 impl SessionStore {
@@ -48,18 +51,42 @@ impl SessionStore {
         Self {
             inner: RwLock::new(HashMap::new()),
             ttl,
+            redis: None,
         }
+    }
+
+    pub async fn new_with_redis(ttl: Duration, url: &str) -> anyhow::Result<Self> {
+        let client = redis::Client::open(url)?;
+        let conn = redis::aio::ConnectionManager::new(client).await?;
+        Ok(Self {
+            inner: RwLock::new(HashMap::new()),
+            ttl,
+            redis: Some(conn),
+        })
     }
 
     pub async fn create(&self) -> anyhow::Result<Arc<Session>> {
         let id = Uuid::new_v4().to_string();
         let tmpdir = TempDir::new()?;
+        let path = tmpdir.path().to_path_buf();
         let session = Arc::new(Session {
             id: id.clone(),
             created_at: Instant::now(),
             tmpdir,
         });
-        self.inner.write().await.insert(id, session.clone());
+        self.inner.write().await.insert(id.clone(), session.clone());
+        if let Some(mut conn) = self.redis.clone() {
+            let key = format!("session:{id}");
+            // Store just the tmpdir path. The in-memory map keeps the TempDir
+            // RAII guard so it survives until expiry.
+            let _: redis::RedisResult<()> = redis::cmd("SET")
+                .arg(&key)
+                .arg(path.to_string_lossy().to_string())
+                .arg("EX")
+                .arg(self.ttl.as_secs())
+                .query_async(&mut conn)
+                .await;
+        }
         Ok(session)
     }
 
@@ -71,6 +98,9 @@ impl SessionStore {
             }
             guard.remove(id);
         }
+        // Future: when running multi-replica, look up Redis here and re-hydrate
+        // from the tmpdir path. v0.1 is single-replica so we only need the
+        // in-memory map for the RAII TempDir guard.
         None
     }
 
