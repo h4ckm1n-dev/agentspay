@@ -14,8 +14,10 @@ use axum::{
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod config;
+mod devnet_wallet;
 mod error;
 mod handlers;
+mod latest_tx;
 mod ratelimit;
 mod session;
 mod state;
@@ -23,7 +25,7 @@ mod subprocess;
 
 use crate::{
     config::Config,
-    handlers::{health, sandbox},
+    handlers::{devnet, health, sandbox, stats},
     session::SessionStore,
     state::AppState,
 };
@@ -44,11 +46,13 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Arc::new(crate::ratelimit::RateLimit::in_memory())
     };
+    let latest_tx = Arc::new(crate::latest_tx::LatestTxCache::new());
     let state = AppState {
         config: Arc::new(config),
         sessions: sessions.clone(),
         http: reqwest::Client::new(),
         ratelimit,
+        latest_tx,
     };
 
     // Background sweep: every 60s, drop expired sessions and log if any were swept.
@@ -58,12 +62,19 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/health", get(health::health))
         .route("/api/sandbox/session", post(sandbox::create_session))
         .route("/api/sandbox/call", post(sandbox::call_tool))
+        .route("/api/devnet/trigger", post(devnet::trigger))
+        .route("/api/devnet/wallet-status", get(devnet::wallet_status))
+        .route("/api/stats/latest-tx", get(stats::latest_tx))
         .with_state(state);
 
     tracing::info!(addr = %listen_addr, "agentspay-web-shim listening");
 
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
