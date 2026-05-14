@@ -15,6 +15,7 @@ mod config;
 mod error;
 mod session;
 mod state;
+mod subprocess;
 
 use crate::{config::Config, session::SessionStore, state::AppState};
 
