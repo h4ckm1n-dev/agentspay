@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LiveTxBadge } from "@/components/ui/LiveTxBadge";
 
 export function Hero() {
   return (
@@ -7,12 +8,12 @@ export function Hero() {
         AGENTSPAY · v0.3
       </p>
       <h1 className="text-4xl sm:text-5xl font-semibold leading-[1.05] tracking-tight">
-        Give your AI agent a<br />budget-controlled wallet.
+        Give your AI agent a<br />
+        budget-controlled wallet.
       </h1>
       <p className="text-fg-muted mt-5 text-base sm:text-lg max-w-2xl">
-        One MCP install. Real Solana settlement. Per-call + daily caps
-        enforced before the chain — your agent literally cannot drain
-        your wallet.
+        One MCP install. Real Solana settlement. Per-call + daily caps enforced
+        before the chain — your agent literally cannot drain your wallet.
       </p>
       <div className="flex flex-wrap gap-3 mt-8">
         <Link
@@ -28,9 +29,8 @@ export function Hero() {
           See live devnet demo →
         </Link>
       </div>
-      <div className="mt-10 text-xs font-mono text-accent flex items-center gap-2">
-        <span className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--tw-shadow-color)] shadow-accent" />
-        Live tx counter loads once the demo wallet is funded — see §3 below.
+      <div className="mt-10">
+        <LiveTxBadge />
       </div>
     </section>
   );
