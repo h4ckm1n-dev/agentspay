@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+FROM rust:1.83-slim AS builder
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      pkg-config libssl-dev ca-certificates protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-copy manifests to enable layer caching.
+COPY Cargo.toml Cargo.lock ./
+COPY rust-toolchain.toml ./
+COPY packages packages
+COPY services services
+COPY examples examples
+
+# Build only the two binaries the shim runtime needs.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release -p agentspay-web-shim -p agentspay-mcp \
+ && cp target/release/agentspay-web-shim /usr/local/bin/agentspay-web-shim \
+ && cp target/release/agentspay-mcp /usr/local/bin/agentspay-mcp
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/bin/agentspay-web-shim /usr/local/bin/agentspay-web-shim
+COPY --from=builder /usr/local/bin/agentspay-mcp /usr/local/bin/agentspay-mcp
+ENV AGENTSPAY_MCP_BINARY=/usr/local/bin/agentspay-mcp \
+    AGENTSPAY_SHIM_LISTEN_ADDR=0.0.0.0:8080 \
+    RUST_LOG=agentspay_web_shim=info,tower_http=info
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/agentspay-web-shim"]
