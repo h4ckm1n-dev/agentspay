@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SandboxTab } from "./SandboxTab";
+import { DevnetTab } from "./DevnetTab";
 
 type TabKey = "sandbox" | "devnet";
 
@@ -35,11 +36,7 @@ export function LiveDemo() {
         </TabButton>
       </div>
 
-      {active === "sandbox" ? (
-        <SandboxTab />
-      ) : (
-        <p className="text-fg-muted text-sm">Devnet tab arrives in Phase 6.</p>
-      )}
+      {active === "sandbox" ? <SandboxTab /> : <DevnetTab />}
     </section>
   );
 }

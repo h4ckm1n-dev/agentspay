@@ -71,3 +71,30 @@ export async function callTool(
     });
   }
 }
+
+export interface DevnetWalletStatus {
+  pubkey: string;
+  sol_balance: number;
+  usdc_balance: number;
+  healthy: boolean;
+  message: string | null;
+}
+
+export interface DevnetTriggerResponse {
+  signature: string;
+  explorer_url: string;
+  symbol: string;
+  amount_charged_usdc: string;
+  body: unknown;
+  latency_ms: number;
+}
+
+export async function fetchWalletStatus(): Promise<DevnetWalletStatus> {
+  return http<DevnetWalletStatus>("/api/devnet/wallet-status", {
+    method: "GET",
+  });
+}
+
+export async function triggerDevnet(): Promise<DevnetTriggerResponse> {
+  return http<DevnetTriggerResponse>("/api/devnet/trigger", { method: "POST" });
+}
