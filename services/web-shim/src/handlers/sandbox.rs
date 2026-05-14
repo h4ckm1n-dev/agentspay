@@ -2,15 +2,24 @@
 
 use std::time::Duration;
 
-use axum::{extract::State, Json};
+use axum::{
+    extract::{ConnectInfo, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::net::SocketAddr;
 
 use crate::{
     error::ShimError,
     state::AppState,
     subprocess::{self, McpCall, NetworkMode},
 };
+
+const SESSION_RL_MAX: u32 = 30;
+const SESSION_RL_WINDOW: Duration = Duration::from_secs(60);
+const CALL_RL_MAX: u32 = 60;
+const CALL_RL_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
@@ -19,8 +28,18 @@ pub struct SessionResponse {
 }
 
 pub async fn create_session(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
 ) -> Result<Json<SessionResponse>, ShimError> {
+    state
+        .ratelimit
+        .check(
+            &format!("sandbox-session:{}", addr.ip()),
+            SESSION_RL_MAX,
+            SESSION_RL_WINDOW,
+        )
+        .await
+        .map_err(|retry_after_secs| ShimError::RateLimited { retry_after_secs })?;
     let session = state
         .sessions
         .create()
@@ -67,6 +86,16 @@ pub async fn call_tool(
             ALLOWED_TOOLS.join(", ")
         )));
     }
+
+    state
+        .ratelimit
+        .check(
+            &format!("sandbox-call:{}", req.session_id),
+            CALL_RL_MAX,
+            CALL_RL_WINDOW,
+        )
+        .await
+        .map_err(|retry_after_secs| ShimError::RateLimited { retry_after_secs })?;
 
     let session = state
         .sessions

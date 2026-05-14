@@ -5,7 +5,7 @@
 //! over stdio, and exposes the responses as JSON over HTTPS. Holds the
 //! rate-limited devnet wallet for the one-click "trigger a real TX" demo.
 
-use std::{sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     routing::{get, post},
@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(addr = %listen_addr, "agentspay-web-shim listening");
 
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
     Ok(())
 }
 
