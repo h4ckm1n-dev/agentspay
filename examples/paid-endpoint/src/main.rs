@@ -352,7 +352,11 @@ async fn real_quote(
             Ok(v) => v,
             Err(e) => {
                 tracing::warn!(error = %e, "facilitator path: X-PAYMENT json parse");
-                return facilitator_failure(&state.pay_to, &path, format!("invalid payload json: {e}"));
+                return facilitator_failure(
+                    &state.pay_to,
+                    &path,
+                    format!("invalid payload json: {e}"),
+                );
             }
         };
         let resource = format!("http://{LISTEN_ADDR}{path}");
@@ -413,7 +417,11 @@ async fn real_quote(
                 let body = PaymentRequiredBody {
                     x402_version: X402_VERSION,
                     error: "solana RPC rejected the signed transaction",
-                    accepts: vec![accepts_entry(&state.pay_to, resource, SOLANA_DEVNET_NETWORK)],
+                    accepts: vec![accepts_entry(
+                        &state.pay_to,
+                        resource,
+                        SOLANA_DEVNET_NETWORK,
+                    )],
                 };
                 let mut response = (StatusCode::PAYMENT_REQUIRED, Json(body)).into_response();
                 response.headers_mut().insert(
@@ -666,9 +674,9 @@ fn resolve_pay_to() -> anyhow::Result<String> {
 }
 
 fn default_provider_keypair_path() -> anyhow::Result<PathBuf> {
-    let home = env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow::anyhow!("$HOME is not set; cannot pick default provider keypair path"))?;
+    let home = env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
+        anyhow::anyhow!("$HOME is not set; cannot pick default provider keypair path")
+    })?;
     Ok(home.join(DEFAULT_PROVIDER_KEYPAIR_SUBPATH))
 }
 

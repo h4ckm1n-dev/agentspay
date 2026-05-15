@@ -35,12 +35,7 @@ impl RateLimit {
 
     /// Returns `Ok(())` if the call is allowed, `Err(retry_after_secs)` if
     /// the bucket is full.
-    pub async fn check(
-        &self,
-        bucket: &str,
-        max: u32,
-        window: Duration,
-    ) -> Result<(), u64> {
+    pub async fn check(&self, bucket: &str, max: u32, window: Duration) -> Result<(), u64> {
         match &self.inner {
             Backend::Memory(m) => {
                 let now = Instant::now();

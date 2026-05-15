@@ -19,6 +19,10 @@ build
 out
 coverage
 
+# Next.js auto-generated (regenerated on every `next dev`)
+next-env.d.ts
+*.tsbuildinfo
+
 # Python
 __pycache__
 *.py[cod]
