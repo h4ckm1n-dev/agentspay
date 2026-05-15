@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Check (Rust + Frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable + clippy + rustfmt)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('Cargo.lock') }}
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: cargo check (all targets)
+        run: cargo check --workspace --all-targets
+
+      - name: cargo test (compile only)
+        run: cargo test --workspace --no-run
+
+      - name: cargo test (run)
+        run: cargo test --workspace -- --nocapture
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo fmt check
+        run: cargo fmt --check
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend lint
+        run: pnpm --filter frontend lint
+
+      - name: Frontend typecheck
+        run: pnpm --filter frontend typecheck
+
+      - name: Frontend build
+        run: pnpm --filter frontend build
+
+  docker:
+    name: Build & Publish Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: check
+
+    # Only run on version tags
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push agentspay-shim
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.shim
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/agentspay-shim:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/agentspay-shim:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push agentspay-paid-endpoint
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.paid-endpoint
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/agentspay-paid-endpoint:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/agentspay-paid-endpoint:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push agentspay-web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.web
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/agentspay-web:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/agentspay-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
