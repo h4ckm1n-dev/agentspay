@@ -46,7 +46,8 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Arc::new(crate::ratelimit::RateLimit::in_memory())
     };
-    let latest_tx = Arc::new(crate::latest_tx::LatestTxCache::new());
+    let latest_tx =
+        Arc::new(crate::latest_tx::LatestTxCache::load(&config.devnet_ledger_path).await?);
     let state = AppState {
         config: Arc::new(config),
         sessions: sessions.clone(),

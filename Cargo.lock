@@ -182,6 +182,7 @@ dependencies = [
  "chrono",
  "redis",
  "reqwest",
+ "sea-orm",
  "serde",
  "serde_json",
  "tempfile",
