@@ -13,12 +13,13 @@
 mod db;
 mod entities;
 mod migration;
+mod pretty;
 mod repo;
 mod solana;
 mod wallet;
 mod x402;
 
-use std::{sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration, time::Instant};
 
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -207,6 +208,7 @@ impl AgentsPayServer {
         description = "Get current USDC balance, today's spending, and remaining daily budget for the agent."
     )]
     async fn agentspay_balance(&self) -> Result<CallToolResult, McpError> {
+        let start = Instant::now();
         let wallet_row = self
             .repo
             .get_or_init_default_wallet()
@@ -240,7 +242,14 @@ impl AgentsPayServer {
             solana_pubkey: self.wallet.pubkey_base58(),
         };
 
-        json_result(&response)
+        let result = json_result(&response);
+        pretty::emit_tool_event(
+            "balance",
+            self.environment(),
+            start.elapsed().as_millis(),
+            pretty::ToolOutcome::Ok(""),
+        );
+        result
     }
 
     #[tool(description = "Pay for an x402-priced URL up to max_amount_usdc. \
@@ -250,26 +259,61 @@ impl AgentsPayServer {
         &self,
         Parameters(req): Parameters<PayUrlRequest>,
     ) -> Result<CallToolResult, McpError> {
+        let start = Instant::now();
+        let env_name = self.environment();
         // ---- 1. Validate inputs.
         let parsed = url::Url::parse(&req.url).map_err(|e| {
             McpError::invalid_params(
                 format!("url is not a valid URL: {e}"),
                 Some(json!({ "field": "url", "value": req.url })),
             )
-        })?;
+        });
+        let parsed = match parsed {
+            Ok(p) => p,
+            Err(e) => {
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err("invalid url"),
+                );
+                return Err(e);
+            }
+        };
         if !matches!(parsed.scheme(), "http" | "https") {
+            pretty::emit_tool_event(
+                "pay_url",
+                env_name,
+                start.elapsed().as_millis(),
+                pretty::ToolOutcome::Err("url scheme must be http or https"),
+            );
             return Err(McpError::invalid_params(
                 "url scheme must be http or https",
                 Some(json!({ "field": "url", "scheme": parsed.scheme() })),
             ));
         }
-        let max_amount: f64 = req.max_amount_usdc.parse().map_err(|e| {
-            McpError::invalid_params(
-                format!("max_amount_usdc must parse as a decimal number: {e}"),
-                Some(json!({ "field": "max_amount_usdc", "value": req.max_amount_usdc })),
-            )
-        })?;
+        let max_amount: f64 = match req.max_amount_usdc.parse() {
+            Ok(v) => v,
+            Err(e) => {
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err("max_amount_usdc not a decimal"),
+                );
+                return Err(McpError::invalid_params(
+                    format!("max_amount_usdc must parse as a decimal number: {e}"),
+                    Some(json!({ "field": "max_amount_usdc", "value": req.max_amount_usdc })),
+                ));
+            }
+        };
         if !max_amount.is_finite() || max_amount <= 0.0 {
+            pretty::emit_tool_event(
+                "pay_url",
+                env_name,
+                start.elapsed().as_millis(),
+                pretty::ToolOutcome::Err("max_amount_usdc must be positive"),
+            );
             return Err(McpError::invalid_params(
                 "max_amount_usdc must be a positive finite number",
                 Some(json!({ "field": "max_amount_usdc", "value": req.max_amount_usdc })),
@@ -280,12 +324,25 @@ impl AgentsPayServer {
         let _guard = self.pay_lock.lock().await;
 
         // ---- 3. Phase 1: probe.
-        let client = X402Client::for_mode(
+        let client = match X402Client::for_mode(
             &self.http,
             self.network.clone(),
             Some(Arc::clone(&self.wallet)),
-        )
-        .map_err(|e| McpError::internal_error(format!("x402 client init: {e}"), None))?;
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err("x402 client init failed"),
+                );
+                return Err(McpError::internal_error(
+                    format!("x402 client init: {e}"),
+                    None,
+                ));
+            }
+        };
         let prepared = match client.prepare(&req.url, max_amount).await {
             Ok(PreparedOrSettled::NoPaymentRequired(paid)) => {
                 let _ = self
@@ -298,7 +355,14 @@ impl AgentsPayServer {
                         "ok payment_status=none".to_string(),
                     ))
                     .await;
-                return reply_paid_response(req.url, paid, "0.00".to_string(), &self.network);
+                let result = reply_paid_response(req.url, paid, "0.00".to_string(), &self.network);
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Ok("no payment required"),
+                );
+                return result;
             }
             Ok(PreparedOrSettled::PaymentRequired(p)) => p,
             Err(X402Error::AmountAboveCap {
@@ -315,6 +379,13 @@ impl AgentsPayServer {
                         format!("rejected reason=above-call-cap required={required_usdc} cap={cap_usdc}"),
                     ))
                     .await;
+                let detail = format!("budget: required={required_usdc} > cap={cap_usdc}");
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err(&detail),
+                );
                 return Err(McpError::invalid_params(
                     format!(
                         "endpoint requires more than max_amount_usdc \
@@ -339,6 +410,13 @@ impl AgentsPayServer {
                         format!("error {e}"),
                     ))
                     .await;
+                let detail = format!("prepare error: {e}");
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err(&detail),
+                );
                 return Err(McpError::internal_error(
                     format!("x402 payment flow failed: {e}"),
                     Some(json!({ "url": req.url })),
@@ -373,6 +451,16 @@ impl AgentsPayServer {
                         ),
                     ))
                     .await;
+                let detail = format!(
+                    "budget: per_call_cap={:.2} exceeded (required={required_usdc_str})",
+                    budget.per_call_usd
+                );
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err(&detail),
+                );
                 return Err(McpError::invalid_params(
                     format!(
                         "endpoint price exceeds configured per-call budget \
@@ -407,6 +495,16 @@ impl AgentsPayServer {
                         ),
                     ))
                     .await;
+                let detail = format!(
+                    "budget: daily_cap={:.2} would be exceeded (today={today_spend:.2} + req={required_usdc_str})",
+                    budget.daily_usd
+                );
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err(&detail),
+                );
                 return Err(McpError::invalid_params(
                     format!(
                         "this call would exceed today's remaining budget \
@@ -444,6 +542,13 @@ impl AgentsPayServer {
                         format!("error post-budget {e}"),
                     ))
                     .await;
+                let detail = format!("settle error: {e}");
+                pretty::emit_tool_event(
+                    "pay_url",
+                    env_name,
+                    start.elapsed().as_millis(),
+                    pretty::ToolOutcome::Err(&detail),
+                );
                 return Err(McpError::internal_error(
                     format!("x402 payment flow failed: {e}"),
                     Some(json!({ "url": req.url })),
@@ -490,6 +595,24 @@ impl AgentsPayServer {
 
         // ---- 7. Reply.
         let explorer_url = explorer_url_for(&self.network, &transaction);
+
+        // Build the per-tool stderr line BEFORE moving the strings into the
+        // JSON response.
+        let detail = match payment_status.as_str() {
+            "paid" if !transaction.is_empty() => {
+                let tx_short = truncate_signature(&transaction);
+                format!("paid {amount_usdc_str} USDC \u{00b7} tx {tx_short}")
+            }
+            "paid" => format!("paid {amount_usdc_str} USDC"),
+            _ => "no payment required".to_string(),
+        };
+        pretty::emit_tool_event(
+            "pay_url",
+            env_name,
+            start.elapsed().as_millis(),
+            pretty::ToolOutcome::Ok(&detail),
+        );
+
         let response = PayUrlResponse {
             status: "ok".to_string(),
             payment_id,
@@ -510,6 +633,7 @@ impl AgentsPayServer {
         &self,
         Parameters(req): Parameters<SetBudgetRequest>,
     ) -> Result<CallToolResult, McpError> {
+        let start = Instant::now();
         validate_positive_amount("daily_usd", req.daily_usd)?;
         validate_positive_amount("per_call_usd", req.per_call_usd)?;
 
@@ -539,7 +663,18 @@ impl AgentsPayServer {
             per_call_usd: budget.per_call_usd,
             updated_at_rfc3339: budget.updated_at.to_rfc3339(),
         };
-        json_result(&response)
+        let detail = format!(
+            "daily={:.2} per_call={:.2}",
+            req.daily_usd, req.per_call_usd
+        );
+        let result = json_result(&response);
+        pretty::emit_tool_event(
+            "set_budget",
+            self.environment(),
+            start.elapsed().as_millis(),
+            pretty::ToolOutcome::Ok(&detail),
+        );
+        result
     }
 
     #[tool(description = "Return the most recent audit log entries (default 20, max 100).")]
@@ -547,6 +682,7 @@ impl AgentsPayServer {
         &self,
         Parameters(req): Parameters<AuditLogRequest>,
     ) -> Result<CallToolResult, McpError> {
+        let start = Instant::now();
         let limit = req
             .limit
             .unwrap_or(DEFAULT_AUDIT_LIMIT)
@@ -573,7 +709,15 @@ impl AgentsPayServer {
             total,
             returned,
         };
-        json_result(&response)
+        let detail = format!("{returned}/{total} entries");
+        let result = json_result(&response);
+        pretty::emit_tool_event(
+            "audit_log",
+            self.environment(),
+            start.elapsed().as_millis(),
+            pretty::ToolOutcome::Ok(&detail),
+        );
+        result
     }
 
     #[tool(
@@ -582,6 +726,7 @@ impl AgentsPayServer {
         a manual web captcha)."
     )]
     async fn agentspay_topup_info(&self) -> Result<CallToolResult, McpError> {
+        let start = Instant::now();
         let response = TopupInfoResponse {
             pubkey: self.wallet.pubkey_base58(),
             network: self.environment().to_string(),
@@ -589,7 +734,14 @@ impl AgentsPayServer {
             sol_faucet_url: SOL_FAUCET_URL.to_string(),
             instructions: TOPUP_INSTRUCTIONS.to_string(),
         };
-        json_result(&response)
+        let result = json_result(&response);
+        pretty::emit_tool_event(
+            "topup_info",
+            self.environment(),
+            start.elapsed().as_millis(),
+            pretty::ToolOutcome::Ok(""),
+        );
+        result
     }
 }
 
@@ -678,6 +830,24 @@ fn reply_paid_response(
     json_result(&response)
 }
 
+/// Compact "GmBDzs…jYau" form of a base58 signature for stderr display.
+fn truncate_signature(sig: &str) -> String {
+    let count = sig.chars().count();
+    if count <= 12 {
+        return sig.to_string();
+    }
+    let prefix: String = sig.chars().take(4).collect();
+    let suffix: String = sig
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("{prefix}\u{2026}{suffix}")
+}
+
 /// Build a Solscan URL for a given TX signature, or an empty string for
 /// sandbox / non-Solana modes (or when the signature is empty).
 fn explorer_url_for(mode: &NetworkMode, signature: &str) -> String {
@@ -719,27 +889,32 @@ fn build_http_client() -> anyhow::Result<reqwest::Client> {
 // Entry point
 // ---------------------------------------------------------------------------
 
+/// Best-effort: extract the on-disk path from a SeaORM SQLite URL like
+/// `sqlite:///abs/path.db?mode=rwc`. Returns the URL unchanged (as a
+/// `PathBuf`) for non-`sqlite://` URLs so the banner still shows
+/// *something* meaningful.
+fn db_path_from_url(url: &str) -> PathBuf {
+    if let Some(rest) = url.strip_prefix("sqlite://") {
+        let without_query = rest.split('?').next().unwrap_or(rest);
+        return PathBuf::from(without_query);
+    }
+    PathBuf::from(url)
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let url = db::resolved_url().await?;
-    tracing::info!(database_url = %url, "opening agentspay-mcp database");
     let db = db::connect_and_migrate(&url).await?;
 
     let repo = Arc::new(LedgerRepo::new(db));
     let _ = repo.get_or_init_default_wallet().await?;
 
-    // Load (or first-run-generate) the agent's Solana keypair. The pubkey
-    // is logged at info level so a user immediately sees it on stderr.
+    // Load (or first-run-generate) the agent's Solana keypair.
     let keypair_path = wallet::resolved_path()?;
     let agent_wallet = AgentWallet::load_or_create(&keypair_path)?;
     let pubkey_b58 = agent_wallet.pubkey_base58();
-    tracing::info!(
-        path = %keypair_path.display(),
-        solana_pubkey = %pubkey_b58,
-        "agent wallet ready"
-    );
     let agent_wallet = Arc::new(agent_wallet);
 
     // Backfill / refresh the wallet row's pubkey column.
@@ -748,15 +923,23 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let network = NetworkMode::from_env();
-    tracing::info!(network = %network.wire_name(), "x402 network mode");
+
+    // Render the starship-style boot banner before opening stdio. All
+    // output goes to stderr; stdout remains reserved for JSON-RPC.
+    let ledger_tx_count = repo.count_audit().await.ok();
+    let ledger_path = db_path_from_url(&url);
+    pretty::print_banner(&pretty::Banner {
+        version: env!("CARGO_PKG_VERSION"),
+        network: network.wire_name(),
+        pubkey: &pubkey_b58,
+        keypair_path: &keypair_path,
+        ledger_path: &ledger_path,
+        ledger_tx_count,
+        tool_count: 5,
+    });
 
     let http = build_http_client()?;
     let server = AgentsPayServer::new(repo, agent_wallet, network, http);
-
-    tracing::info!(
-        version = env!("CARGO_PKG_VERSION"),
-        "starting agentspay-mcp on stdio"
-    );
 
     let service = server
         .serve(stdio())
