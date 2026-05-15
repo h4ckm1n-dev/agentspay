@@ -63,7 +63,7 @@ export function SandboxTab() {
             key={b.tool}
             disabled={busy !== null}
             onClick={() => run(b.tool, b.args(), b.label)}
-            className="bg-bg-elev border border-border rounded-md px-3 py-1.5 text-xs font-mono hover:bg-border-subtle transition disabled:opacity-40"
+            className="bg-bg-elev border border-border rounded-md px-3 py-1.5 text-xs font-mono transition-colors transition-shadow hover:border-accent/40 hover:shadow-[inset_0_1px_0_rgba(16,185,129,0.15)] disabled:opacity-40 disabled:hover:border-border disabled:hover:shadow-none"
           >
             {busy === b.tool ? "…" : b.label}
           </button>

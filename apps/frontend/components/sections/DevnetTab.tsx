@@ -80,7 +80,7 @@ export function DevnetTab() {
       <button
         disabled={buttonDisabled}
         onClick={trigger}
-        className="bg-accent text-black rounded-md px-4 py-2 text-sm font-semibold hover:opacity-90 transition disabled:opacity-40 mb-4"
+        className="bg-accent text-black rounded-md px-4 py-2 text-sm font-semibold transition-shadow shadow-[0_0_24px_rgba(16,185,129,0.35)] hover:shadow-[0_0_32px_rgba(16,185,129,0.55)] hover:opacity-95 disabled:opacity-40 disabled:shadow-none mb-4"
       >
         {busy ? "Signing + broadcasting…" : "Trigger a real on-chain tx"}
       </button>
