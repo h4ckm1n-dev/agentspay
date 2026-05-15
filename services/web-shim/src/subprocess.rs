@@ -51,7 +51,12 @@ pub async fn run(call: McpCall<'_>) -> Result<Value, ShimError> {
         .env("RUST_LOG", "agentspay_mcp=warn")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        // Forward subprocess stderr to the shim's stderr so the pretty
+        // agentspay-mcp banner + per-tool-call status lines surface in
+        // `docker compose logs shim` (and in operator-attached terminals).
+        // Native MCP-host installs already see this output — this brings
+        // the Docker-stack experience in line.
+        .stderr(Stdio::inherit());
 
     let mut child = cmd
         .spawn()
