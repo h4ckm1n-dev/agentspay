@@ -47,7 +47,11 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 // Constants
 // ---------------------------------------------------------------------------
 
-const LISTEN_ADDR: &str = "127.0.0.1:3001";
+/// Default bind address. We use `0.0.0.0` (not `127.0.0.1`) so the
+/// container's port-forward can actually reach the process. On a developer
+/// laptop this still answers on `localhost:3001` because the kernel accepts
+/// loopback packets on any local IP.
+const LISTEN_ADDR: &str = "0.0.0.0:3001";
 const X402_VERSION: u8 = 1;
 const SCHEME: &str = "exact";
 const SANDBOX_NETWORK: &str = "sandbox";
