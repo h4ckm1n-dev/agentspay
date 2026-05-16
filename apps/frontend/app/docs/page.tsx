@@ -1,6 +1,31 @@
+import type { Metadata } from "next";
 import * as React from "react";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { Footer } from "@/components/sections/Footer";
+import {
+  BreadcrumbStructuredData,
+  TechArticleStructuredData,
+} from "@/components/seo/PageStructuredData";
+
+export const metadata: Metadata = {
+  title: "Docs — Install, tools, payment flow, security",
+  description:
+    "Developer documentation for AgentsPay: install agentspay-mcp in Claude Code / Cursor / Cline / Zed, configure budgets, sign Solana devnet USDC settlements, audit every transaction. Five MCP tools, one binary, SQLite ledger.",
+  alternates: { canonical: "/docs" },
+  openGraph: {
+    title: "AgentsPay docs — MCP wallet for AI agents",
+    description:
+      "Install, configure, and verify the AgentsPay MCP wallet. Tool reference, payment flow, budgets, devnet funding, security model.",
+    url: "/docs",
+    type: "article",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AgentsPay docs",
+    description:
+      "Tool reference and developer docs for the AgentsPay MCP wallet.",
+  },
+};
 
 const TOC = [
   ["overview", "Overview"],
@@ -21,7 +46,8 @@ const TOC = [
 const TOOL_REFERENCE = [
   {
     name: "agentspay_balance",
-    intent: "Inspect the local wallet row, budget settings, today's spend, and signing pubkey.",
+    intent:
+      "Inspect the local wallet row, budget settings, today's spend, and signing pubkey.",
     args: "No arguments.",
     returns: [
       "available_usdc: local wallet-row balance string",
@@ -44,7 +70,8 @@ const TOOL_REFERENCE = [
   },
   {
     name: "agentspay_pay_url",
-    intent: "Call an x402-priced URL, cap the quoted amount, sign if allowed, retry, and persist proof.",
+    intent:
+      "Call an x402-priced URL, cap the quoted amount, sign if allowed, retry, and persist proof.",
     args: `{
   "url": "http://localhost:3001/real-quote/AAPL",
   "max_amount_usdc": "0.50"
@@ -89,7 +116,8 @@ const TOOL_REFERENCE = [
   },
   {
     name: "agentspay_audit_log",
-    intent: "Return recent tool attempts, including rejected and successful payment calls.",
+    intent:
+      "Return recent tool attempts, including rejected and successful payment calls.",
     args: `{
   "limit": 20
 }`,
@@ -114,7 +142,8 @@ const TOOL_REFERENCE = [
   },
   {
     name: "agentspay_topup_info",
-    intent: "Show the pubkey and faucet instructions needed to fund the local signer.",
+    intent:
+      "Show the pubkey and faucet instructions needed to fund the local signer.",
     args: "No arguments.",
     returns: [
       "pubkey to paste into faucets",
@@ -134,44 +163,104 @@ const TOOL_REFERENCE = [
 ] as const;
 
 const ENV_VARS = [
-  ["AGENTSPAY_NETWORK", "solana-devnet", "MCP settlement mode. Use sandbox for no-chain local testing."],
-  ["AGENTSPAY_KEYPAIR_PATH", "~/.agentspay/keypair.json", "Solana CLI-compatible signer JSON, created mode 0600."],
-  ["AGENTSPAY_DATABASE_URL", "sqlite://~/.agentspay/agentspay-mcp.db?mode=rwc", "SeaORM SQLite ledger and audit database."],
-  ["AGENTSPAY_SOLANA_RPC_URL", "https://api.devnet.solana.com", "RPC endpoint used to fetch blockhashes and balances."],
+  [
+    "AGENTSPAY_NETWORK",
+    "solana-devnet",
+    "MCP settlement mode. Use sandbox for no-chain local testing.",
+  ],
+  [
+    "AGENTSPAY_KEYPAIR_PATH",
+    "~/.agentspay/keypair.json",
+    "Solana CLI-compatible signer JSON, created mode 0600.",
+  ],
+  [
+    "AGENTSPAY_DATABASE_URL",
+    "sqlite://~/.agentspay/agentspay-mcp.db?mode=rwc",
+    "SeaORM SQLite ledger and audit database.",
+  ],
+  [
+    "AGENTSPAY_SOLANA_RPC_URL",
+    "https://api.devnet.solana.com",
+    "RPC endpoint used to fetch blockhashes and balances.",
+  ],
   ["RUST_LOG", "agentspay_mcp=info", "Structured logs and warning verbosity."],
   ["NO_COLOR", "unset", "Disable stderr ANSI color from the MCP banner."],
   ["FORCE_COLOR", "unset", "Force ANSI color for Docker logs or CI output."],
-  ["AGENTSPAY_SHIM_LISTEN_ADDR", "0.0.0.0:8080", "HTTP bind address for the web shim."],
-  ["AGENTSPAY_MCP_BINARY", "/usr/local/bin/agentspay-mcp", "Binary spawned by the shim for browser demos."],
-  ["AGENTSPAY_REDIS_URL", "unset", "Redis sessions and rate limits. Unset uses in-memory stores."],
-  ["AGENTSPAY_DEVNET_WALLET_PATH", "/data/devnet-wallet.json", "Funded demo signer used by /api/devnet/trigger."],
-  ["AGENTSPAY_DEVNET_LEDGER_PATH", "/data/devnet-ledger.db", "Persistent demo ledger and latest-tx cache."],
-  ["AGENTSPAY_PAID_ENDPOINT_URL", "http://localhost:3001", "Demo x402 provider target."],
-  ["AGENTSPAY_PROVIDER_KEYPAIR", "~/.agentspay/provider-keypair.json", "Provider receiver keypair for the demo endpoint."],
-  ["AGENTSPAY_DEMO_PAYTO", "derived provider pubkey", "Explicit receiver pubkey override for demo quotes."],
-  ["AGENTSPAY_USE_FACILITATOR", "false", "Opt-in x402.org facilitator path in the demo provider."],
-  ["AGENTSPAY_FACILITATOR_URL", "https://x402.org/facilitator", "Facilitator base URL when enabled."],
+  [
+    "AGENTSPAY_SHIM_LISTEN_ADDR",
+    "0.0.0.0:8080",
+    "HTTP bind address for the web shim.",
+  ],
+  [
+    "AGENTSPAY_MCP_BINARY",
+    "/usr/local/bin/agentspay-mcp",
+    "Binary spawned by the shim for browser demos.",
+  ],
+  [
+    "AGENTSPAY_REDIS_URL",
+    "unset",
+    "Redis sessions and rate limits. Unset uses in-memory stores.",
+  ],
+  [
+    "AGENTSPAY_DEVNET_WALLET_PATH",
+    "/data/devnet-wallet.json",
+    "Funded demo signer used by /api/devnet/trigger.",
+  ],
+  [
+    "AGENTSPAY_DEVNET_LEDGER_PATH",
+    "/data/devnet-ledger.db",
+    "Persistent demo ledger and latest-tx cache.",
+  ],
+  [
+    "AGENTSPAY_PAID_ENDPOINT_URL",
+    "http://localhost:3001",
+    "Demo x402 provider target.",
+  ],
+  [
+    "AGENTSPAY_PROVIDER_KEYPAIR",
+    "~/.agentspay/provider-keypair.json",
+    "Provider receiver keypair for the demo endpoint.",
+  ],
+  [
+    "AGENTSPAY_DEMO_PAYTO",
+    "derived provider pubkey",
+    "Explicit receiver pubkey override for demo quotes.",
+  ],
+  [
+    "AGENTSPAY_USE_FACILITATOR",
+    "false",
+    "Opt-in x402.org facilitator path in the demo provider.",
+  ],
+  [
+    "AGENTSPAY_FACILITATOR_URL",
+    "https://x402.org/facilitator",
+    "Facilitator base URL when enabled.",
+  ],
 ] as const;
 
 const TROUBLE = [
   {
     symptom: "The agent can see tools, but payment is rejected by budget.",
-    cause: "The quoted x402 amount is above max_amount_usdc, above per_call_usd, or would cross daily_usd.",
+    cause:
+      "The quoted x402 amount is above max_amount_usdc, above per_call_usd, or would cross daily_usd.",
     fix: "Call agentspay_balance, then lower the URL price or raise caps with agentspay_set_budget.",
   },
   {
     symptom: "Devnet payment fails with account debit or insufficient funds.",
-    cause: "The signer has no SOL for fees, no devnet USDC, or no initialized token account.",
+    cause:
+      "The signer has no SOL for fees, no devnet USDC, or no initialized token account.",
     fix: "Run agentspay_topup_info and fund the returned pubkey from both Solana and Circle faucets.",
   },
   {
     symptom: "MCP host starts but cannot find AgentsPay.",
-    cause: "The host config points at a relative path or a binary that was not built.",
+    cause:
+      "The host config points at a relative path or a binary that was not built.",
     fix: "Use an absolute path to target/release/agentspay-mcp and run cargo build --release -p agentspay-mcp again.",
   },
   {
     symptom: "The website sandbox returns session gone.",
-    cause: "Browser session state expired. The shim keeps sandbox sessions for 30 minutes.",
+    cause:
+      "Browser session state expired. The shim keeps sandbox sessions for 30 minutes.",
     fix: "Refresh the page or create a new sandbox session.",
   },
   {
@@ -181,7 +270,8 @@ const TROUBLE = [
   },
   {
     symptom: "Facilitator mode rejects the Solana payload.",
-    cause: "The direct-RPC path signs a fee-paying transaction. Some facilitators expect a sponsored format.",
+    cause:
+      "The direct-RPC path signs a fee-paying transaction. Some facilitators expect a sponsored format.",
     fix: "Use direct RPC for the current demo path. Treat facilitator mode as experimental until the payload format is refactored.",
   },
 ] as const;
@@ -189,6 +279,18 @@ const TROUBLE = [
 export default function DocsPage() {
   return (
     <main>
+      <BreadcrumbStructuredData
+        trail={[
+          { name: "Home", url: "/" },
+          { name: "Docs", url: "/docs" },
+        ]}
+      />
+      <TechArticleStructuredData
+        headline="AgentsPay developer documentation"
+        description="Install, configure, and verify the AgentsPay MCP wallet. Tool reference, payment flow, budgets, devnet funding, security model."
+        path="/docs"
+        sections={TOC.map(([, label]) => label)}
+      />
       <section className="border-b border-border-subtle px-6 py-12">
         <div className="mx-auto max-w-6xl">
           <p className="mb-3 font-mono text-xs uppercase tracking-[0.12em] text-accent">
@@ -222,11 +324,24 @@ export default function DocsPage() {
         </aside>
 
         <div className="space-y-16">
-          <DocSection id="overview" eyebrow="01" title="What You Are Installing">
+          <DocSection
+            id="overview"
+            eyebrow="01"
+            title="What You Are Installing"
+          >
             <div className="grid gap-4 md:grid-cols-3">
-              <Fact title="Local binary" body="The MCP host launches agentspay-mcp over stdio. There is no hosted AgentsPay control plane in the v0.3 path." />
-              <Fact title="Self-custodial signer" body="The keypair lives on your machine at ~/.agentspay/keypair.json unless AGENTSPAY_KEYPAIR_PATH overrides it." />
-              <Fact title="Policy before signature" body="max_amount_usdc and configured budgets are checked before the code builds a Solana transaction." />
+              <Fact
+                title="Local binary"
+                body="The MCP host launches agentspay-mcp over stdio. There is no hosted AgentsPay control plane in the v0.3 path."
+              />
+              <Fact
+                title="Self-custodial signer"
+                body="The keypair lives on your machine at ~/.agentspay/keypair.json unless AGENTSPAY_KEYPAIR_PATH overrides it."
+              />
+              <Fact
+                title="Policy before signature"
+                body="max_amount_usdc and configured budgets are checked before the code builds a Solana transaction."
+              />
             </div>
             <Flow>
               <span>MCP host</span>
@@ -248,9 +363,9 @@ export default function DocsPage() {
               <CodeBlock value="claude mcp add agentspay $PWD/target/release/agentspay-mcp" />
             </div>
             <Callout title="Important">
-              Call <Mono>agentspay_set_budget</Mono> before the first paid
-              call. The balance view displays a default budget when no row
-              exists, but the active enforcement policy is created by
+              Call <Mono>agentspay_set_budget</Mono> before the first paid call.
+              The balance view displays a default budget when no row exists, but
+              the active enforcement policy is created by
               <Mono> agentspay_set_budget</Mono>.
             </Callout>
           </DocSection>
@@ -262,7 +377,10 @@ export default function DocsPage() {
               you want sandbox mode, a custom ledger, or a custom keypair path.
             </p>
             <div className="grid gap-4 md:grid-cols-2">
-              <Host title="Claude Code" code="claude mcp add agentspay /abs/path/agentspay-mcp" />
+              <Host
+                title="Claude Code"
+                code="claude mcp add agentspay /abs/path/agentspay-mcp"
+              />
               <Host
                 title="Cursor"
                 code={`{
@@ -349,12 +467,28 @@ Pay http://localhost:3001/real-quote/AAPL with max_amount_usdc 0.25.`}
             </Callout>
           </DocSection>
 
-          <DocSection id="policy" eyebrow="07" title="Budgets, Ledger, And Audit Proof">
+          <DocSection
+            id="policy"
+            eyebrow="07"
+            title="Budgets, Ledger, And Audit Proof"
+          >
             <div className="grid gap-4 md:grid-cols-2">
-              <Fact title="Budget table" body="One default agent row stores daily_usd and per_call_usd. Updates are audited." />
-              <Fact title="Daily spend" body="The repo sums ledger_entry.amount_usdc for rows since UTC midnight." />
-              <Fact title="Critical section" body="pay_url holds a Tokio mutex while checking budget, settling, and recording the result." />
-              <Fact title="Audit trail" body="Rejected calls, no-payment calls, budget updates, and paid calls are visible through agentspay_audit_log." />
+              <Fact
+                title="Budget table"
+                body="One default agent row stores daily_usd and per_call_usd. Updates are audited."
+              />
+              <Fact
+                title="Daily spend"
+                body="The repo sums ledger_entry.amount_usdc for rows since UTC midnight."
+              />
+              <Fact
+                title="Critical section"
+                body="pay_url holds a Tokio mutex while checking budget, settling, and recording the result."
+              />
+              <Fact
+                title="Audit trail"
+                body="Rejected calls, no-payment calls, budget updates, and paid calls are visible through agentspay_audit_log."
+              />
             </div>
             <CodePanel
               title="SQLite state"
@@ -370,13 +504,21 @@ seaql_migrations`}
           <DocSection id="devnet" eyebrow="08" title="Devnet Funding">
             <p>
               Devnet settlement needs two balances on the signer: SOL for fees
-              and USDC for the SPL transfer. Circle&apos;s USDC faucet requires a
-              browser captcha, so AgentsPay returns instructions instead of
+              and USDC for the SPL transfer. Circle&apos;s USDC faucet requires
+              a browser captcha, so AgentsPay returns instructions instead of
               trying to auto-fund.
             </p>
             <div className="grid gap-4 md:grid-cols-2">
-              <LinkBox title="SOL faucet" href="https://faucet.solana.com" body="Use the same pubkey returned by agentspay_topup_info." />
-              <LinkBox title="USDC faucet" href="https://faucet.circle.com" body="Select Solana Devnet, paste pubkey, request USDC." />
+              <LinkBox
+                title="SOL faucet"
+                href="https://faucet.solana.com"
+                body="Use the same pubkey returned by agentspay_topup_info."
+              />
+              <LinkBox
+                title="USDC faucet"
+                href="https://faucet.circle.com"
+                body="Select Solana Devnet, paste pubkey, request USDC."
+              />
             </div>
             <CodePanel
               title="Local sandbox mode"
@@ -401,10 +543,22 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
               <span>Solana RPC</span>
             </Flow>
             <div className="grid gap-4 md:grid-cols-2">
-              <Fact title="Sandbox sessions" body="POST /api/sandbox/session creates an isolated tempdir, keypair, and SQLite ledger for 30 minutes." />
-              <Fact title="Sandbox calls" body="POST /api/sandbox/call is limited to 60 calls per minute per session." />
-              <Fact title="Devnet trigger" body="POST /api/devnet/trigger is limited to 1 call per IP per hour." />
-              <Fact title="Latest proof" body="GET /api/stats/latest-tx returns the most recent settlement for 24 hours and hydrates from SQLite on restart." />
+              <Fact
+                title="Sandbox sessions"
+                body="POST /api/sandbox/session creates an isolated tempdir, keypair, and SQLite ledger for 30 minutes."
+              />
+              <Fact
+                title="Sandbox calls"
+                body="POST /api/sandbox/call is limited to 60 calls per minute per session."
+              />
+              <Fact
+                title="Devnet trigger"
+                body="POST /api/devnet/trigger is limited to 1 call per IP per hour."
+              />
+              <Fact
+                title="Latest proof"
+                body="GET /api/stats/latest-tx returns the most recent settlement for 24 hours and hydrates from SQLite on restart."
+              />
             </div>
             <div className="mt-5 space-y-3">
               <CodeBlock value="cp docker/.env.example docker/.env" />
@@ -436,10 +590,22 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
 
           <DocSection id="security" eyebrow="11" title="Security Model">
             <div className="grid gap-4 md:grid-cols-2">
-              <Fact title="Local key custody" body="The signer is generated locally and written with owner-only permissions on Unix." />
-              <Fact title="No stdout logging" body="MCP JSON-RPC uses stdout. Human-readable startup and tool events are written to stderr." />
-              <Fact title="Least privilege by default" body="The agent gets five tools, not a broad wallet API or a raw private key." />
-              <Fact title="Devnet first" body="Mainnet exists as a mode enum, but the shipped product and docs keep mainnet out of the happy path." />
+              <Fact
+                title="Local key custody"
+                body="The signer is generated locally and written with owner-only permissions on Unix."
+              />
+              <Fact
+                title="No stdout logging"
+                body="MCP JSON-RPC uses stdout. Human-readable startup and tool events are written to stderr."
+              />
+              <Fact
+                title="Least privilege by default"
+                body="The agent gets five tools, not a broad wallet API or a raw private key."
+              />
+              <Fact
+                title="Devnet first"
+                body="Mainnet exists as a mode enum, but the shipped product and docs keep mainnet out of the happy path."
+              />
             </div>
             <Callout title="Trust boundary">
               The MCP host is the local auth boundary for v0.3. There is no

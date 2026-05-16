@@ -1,0 +1,43 @@
+# AgentsPay
+
+> AgentsPay is a local MCP server that gives Claude Code, Cursor, Cline, and Zed agents a budget-controlled USDC wallet for x402-priced APIs. Per-call and daily caps are enforced before signing; every settlement is recorded in SQLite and verifiable on Solana.
+
+AgentsPay distributes as a single Rust binary (`agentspay-mcp`) that an MCP host installs locally. It speaks the Model Context Protocol over stdio and exposes five tools to the agent: `agentspay_balance`, `agentspay_pay_url`, `agentspay_set_budget`, `agentspay_audit_log`, `agentspay_topup_info`. The product status is v0.3 on Solana devnet; mainnet is gated behind a v0.5 compliance review.
+
+The wedge: agent developers want their agent to autonomously pay for x402-priced APIs without handing it a credit card or an unrestricted keypair. AgentsPay enforces per-call and daily USDC spend caps *before* signing — the agent cannot drain the wallet. Every paid call writes an audit row in SQLite.
+
+## Core links
+
+- [Home](https://agentspay.dev/): Project overview, install command, live proof.
+- [Demo](https://agentspay.dev/demo): Browser sandbox and a one-click button that signs a real Solana devnet USDC transfer through the same `agentspay-mcp` binary.
+- [Proof](https://agentspay.dev/proof): Solscan-confirmed settlement ledger with permanent records plus the latest browser-triggered transaction.
+- [Docs](https://agentspay.dev/docs): Tool reference, payment flow, budgets, devnet funding, security model.
+
+## Code
+
+- [GitHub repository](https://github.com/h4ckm1n/agentspay): MIT-licensed Rust + Next.js source.
+- [Releases](https://github.com/h4ckm1n/agentspay/releases): Pre-built binaries for macOS / Linux / Windows.
+
+## How an agent uses AgentsPay
+
+1. The user installs `agentspay-mcp` and registers it with their MCP host (`claude mcp add agentspay $PWD/target/release/agentspay-mcp`).
+2. First run writes a self-custodial keypair to `~/.agentspay/keypair.json` (mode 0600) and creates the SQLite ledger.
+3. The user funds the agent pubkey with devnet SOL and devnet USDC.
+4. The user sets a budget once: `agentspay_set_budget(daily_usd=25, per_call_usd=1)`.
+5. From then on, when the agent encounters an x402-priced URL it calls `agentspay_pay_url(url, max_amount)`. AgentsPay checks the budget, signs a Solana SPL `transfer_checked`, retries the request with the `X-Payment` header, and writes a ledger entry. The agent receives the response body.
+
+## Architecture, briefly
+
+- `services/mcp/` — `agentspay-mcp` binary (Rust, rmcp 0.16, Tokio, SeaORM, SQLite).
+- `services/web-shim/` — Axum HTTP bridge that wraps `agentspay-mcp` stdio for the website demo.
+- `examples/paid-endpoint/` — Demo x402 provider used by the demo button.
+- `apps/frontend/` — Next.js 15 marketing site.
+- `docker/` — 5-service compose stack for the public demo (Caddy + web + shim + paid-endpoint + Redis).
+
+## Settlement
+
+USDC on Solana via the official x402 protocol. Devnet only in v0.3. Real settlements complete in ~2 seconds at ~$0.00025 per tx. Three permanent receipt examples on the [proof page](https://agentspay.dev/proof).
+
+## Non-goals (v0.1 through v0.3)
+
+No auth or API key service (the MCP host is the auth boundary). No gRPC. No REST mutation API. No public TypeScript or Python SDK. No webhook delivery. No multi-tenant. No KYC. No mainnet money. No dashboard UI. The web-shim is a demo backend, not a hosted service.
