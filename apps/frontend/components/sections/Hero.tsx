@@ -3,34 +3,77 @@ import { LiveTxBadge } from "@/components/ui/LiveTxBadge";
 
 export function Hero() {
   return (
-    <section className="px-6 pt-24 pb-16 max-w-3xl mx-auto">
-      <p className="text-xs uppercase tracking-[0.12em] text-fg-muted mb-4">
-        AGENTSPAY · v0.3
-      </p>
-      <h1 className="text-4xl sm:text-5xl font-semibold leading-[1.05] tracking-tight">
-        Give your AI agent a<br />
-        budget-controlled wallet.
-      </h1>
-      <p className="text-fg-muted mt-5 text-base sm:text-lg max-w-2xl">
-        One MCP install. Real Solana settlement. Per-call + daily caps enforced
-        before the chain — your agent literally cannot drain your wallet.
-      </p>
-      <div className="flex flex-wrap gap-3 mt-8">
-        <Link
-          href="#install"
-          className="bg-white text-black rounded-md px-4 py-2.5 text-sm font-semibold hover:bg-fg transition"
-        >
-          Install in Claude Code
-        </Link>
-        <Link
-          href="#demo"
-          className="border border-border text-fg rounded-md px-4 py-2.5 text-sm font-medium hover:bg-bg-elev transition"
-        >
-          See live devnet demo →
-        </Link>
-      </div>
-      <div className="mt-10">
-        <LiveTxBadge />
+    <section className="relative overflow-hidden border-b border-border-subtle">
+      <div
+        className="absolute inset-0 bg-cover bg-center opacity-35"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, rgba(10,10,11,0.98) 0%, rgba(10,10,11,0.78) 46%, rgba(10,10,11,0.48) 100%), url('https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fit=crop&w=1800&q=80')",
+        }}
+        aria-hidden
+      />
+      <div className="relative mx-auto grid min-h-[72svh] max-w-6xl items-center gap-10 px-6 py-16 md:grid-cols-[1.05fr_0.95fr]">
+        <div>
+          <p className="mb-4 font-mono text-xs uppercase tracking-[0.12em] text-fg-muted">
+            ~/agentspay
+          </p>
+          <h1 className="max-w-3xl text-4xl font-semibold leading-[1.05] sm:text-6xl">
+            AgentsPay
+          </h1>
+          <p className="mt-5 max-w-2xl text-base text-fg-muted sm:text-lg">
+            A budget-controlled USDC wallet for autonomous AI agents. One MCP
+            install, real Solana settlement, and spend caps enforced before the
+            chain.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link
+              href="#install"
+              className="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-fg"
+            >
+              Install in Claude Code
+            </Link>
+            <Link
+              href="/demo"
+              className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-fg transition hover:bg-bg-elev"
+            >
+              Run the demo
+            </Link>
+          </div>
+          <div className="mt-10">
+            <LiveTxBadge />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-border bg-black/70 font-mono text-xs shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
+          <div className="flex items-center justify-between border-b border-border-subtle bg-bg-elev/80 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+              <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
+              <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
+            </div>
+            <span className="text-fg-faint">mcp/v0.3</span>
+          </div>
+          <div className="space-y-3 p-4 text-fg-muted">
+            <p>
+              <span className="text-syntax-punct">$ </span>
+              <span className="text-fg">agentspay_balance</span>
+            </p>
+            <pre className="whitespace-pre-wrap text-syntax-string">{`{
+  "available_usdc": "19.90",
+  "budget_remaining_today_usdc": "24.90",
+  "environment": "solana-devnet"
+}`}</pre>
+            <p>
+              <span className="text-syntax-punct">$ </span>
+              <span className="text-fg">
+                agentspay_pay_url max_amount_usdc=0.50
+              </span>
+            </p>
+            <p className="text-accent">
+              paid 0.10 USDC - Solscan receipt confirmed
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );

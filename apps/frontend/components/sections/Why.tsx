@@ -15,9 +15,9 @@ const CARDS = [
 
 export function Why() {
   return (
-    <section className="px-6 py-16 max-w-3xl mx-auto border-t border-border-subtle">
+    <section className="mx-auto max-w-6xl border-t border-border-subtle px-6 py-16">
       <p className="text-xs uppercase tracking-[0.12em] text-accent mb-4 font-mono">
-        §5 · WHY
+        WHY
       </p>
       <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-6">
         Built for indie devs in Claude Code, not enterprise procurement.

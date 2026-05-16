@@ -1,10 +1,21 @@
 import type { Metadata } from "next";
+import { SiteNav } from "@/components/layout/SiteNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AgentsPay — A budget-controlled USDC wallet for AI agents",
+  title: "AgentsPay - Budget-controlled USDC for AI agents",
   description:
     "One MCP install. Real Solana settlement. Per-call and daily caps enforced before the chain.",
+  icons: {
+    icon: [
+      {
+        url: "/favicon.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -14,7 +25,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <SiteNav />
+        {children}
+      </body>
     </html>
   );
 }
