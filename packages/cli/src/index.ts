@@ -1,300 +1,385 @@
 #!/usr/bin/env node
+/**
+ * agentspay — command-line interface for the local AgentsPay wallet.
+ *
+ * Wraps @agentspay/sdk-js. Every subcommand spawns the agentspay-mcp binary
+ * once per call (same transport the SDK uses programmatically).
+ *
+ * Usage:
+ *   agentspay balance
+ *   agentspay pay-url <url> --max <usdc>
+ *   agentspay set-budget --daily <usd> --per-call <usd>
+ *   agentspay audit-log [--limit N]
+ *   agentspay topup-info
+ *
+ * Global flags:
+ *   --network <sandbox|solana-devnet|solana-mainnet>   (default: solana-devnet)
+ *   --bin <path>           path to the agentspay-mcp binary
+ *   --keypair <path>       override AGENTSPAY_KEYPAIR_PATH
+ *   --json                 emit raw JSON instead of pretty output
+ *   --debug                inherit subprocess stderr (the pretty banner)
+ *   -h, --help             show help
+ *   -v, --version          show version
+ */
 
-type AgentsPayEnvironment = "sandbox" | "live";
+import {
+  AgentsPayClient,
+  AgentsPayError,
+  BinaryNotFoundError,
+  BudgetExceededError,
+  InvalidInputError,
+  PerCallCapExceededError,
+  TransportTimeoutError,
+  X402SettlementError,
+  type AuditLogResponse,
+  type BalanceResponse,
+  type Network,
+  type PayUrlResponse,
+  type SetBudgetResponse,
+  type TopupInfoResponse,
+} from "@agentspay/sdk-js";
 
-interface CliOptions {
-  baseUrl: string;
-  apiKey: string | undefined;
-  environment: AgentsPayEnvironment;
-  json: boolean;
-  debug: boolean;
+const VERSION = "0.2.0";
+
+interface GlobalOptions {
+  readonly network: Network;
+  readonly mcpBinPath: string | undefined;
+  readonly keypairPath: string | undefined;
+  readonly json: boolean;
+  readonly debug: boolean;
 }
 
-interface ParsedArgs {
-  command: readonly string[];
-  options: CliOptions;
-}
+void run(process.argv.slice(2));
 
-class CliError extends Error {
-  readonly status: number | undefined;
-  readonly details: unknown | undefined;
-
-  constructor(message: string, options: { readonly status?: number; readonly details?: unknown } = {}) {
-    super(message);
-    this.name = "CliError";
-    this.status = options.status;
-    this.details = options.details;
-  }
-}
-
-const DEFAULT_BASE_URL = "http://localhost:8080";
-
-void main(process.argv.slice(2)).catch((error: unknown) => {
-  if (error instanceof CliError) {
-    console.error(error.message);
-    if (error.status !== undefined) {
-      console.error(`status: ${error.status}`);
-    }
-    if (error.details !== undefined) {
-      console.error(formatValue(error.details));
-    }
-  } else if (error instanceof Error) {
-    console.error(error.message);
-  } else {
-    console.error(String(error));
-  }
-  process.exitCode = 1;
-});
-
-async function main(argv: readonly string[]): Promise<void> {
-  const parsed = parseArgs(argv);
-  const [command, subcommand] = parsed.command;
-
-  if (command === undefined || command === "help" || command === "--help" || command === "-h") {
-    printHelp();
-    return;
-  }
-
-  if (command === "status") {
-    await handleStatus(parsed.options);
-    return;
-  }
-
-  if (command === "balance") {
-    await handleBalance(parsed.options);
-    return;
-  }
-
-  if (command === "endpoints" && subcommand === "list") {
-    await handleEndpointsList(parsed.options);
-    return;
-  }
-
-  if (command === "demo") {
-    handleDemo(parsed.options);
-    return;
-  }
-
-  throw new CliError(`Unknown command: ${parsed.command.join(" ")}`);
-}
-
-function parseArgs(argv: readonly string[]): ParsedArgs {
-  const options: CliOptions = {
-    baseUrl: process.env.AGENTSPAY_BASE_URL ?? DEFAULT_BASE_URL,
-    apiKey: process.env.AGENTSPAY_API_KEY,
-    environment: "sandbox",
-    json: false,
-    debug: false,
-  };
-  const command: string[] = [];
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-
-    if (arg === "--base-url") {
-      options.baseUrl = requireValue(argv, index, "--base-url");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--api-key") {
-      options.apiKey = requireValue(argv, index, "--api-key");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--environment") {
-      options.environment = parseEnvironment(requireValue(argv, index, "--environment"));
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--sandbox") {
-      options.environment = "sandbox";
-      continue;
-    }
-
-    if (arg === "--live") {
-      options.environment = "live";
-      continue;
-    }
-
-    if (arg === "--json") {
-      options.json = true;
-      continue;
-    }
-
-    if (arg === "--debug") {
-      options.debug = true;
-      continue;
-    }
-
-    command.push(arg ?? "");
-  }
-
-  options.baseUrl = options.baseUrl.replace(/\/+$/, "");
-  return { command, options };
-}
-
-function requireValue(argv: readonly string[], index: number, flag: string): string {
-  const value = argv[index + 1];
-  if (value === undefined || value.startsWith("--")) {
-    throw new CliError(`Missing value for ${flag}`);
-  }
-  return value;
-}
-
-function parseEnvironment(value: string): AgentsPayEnvironment {
-  if (value === "sandbox" || value === "live") {
-    return value;
-  }
-  throw new CliError(`Invalid environment: ${value}`);
-}
-
-async function handleStatus(options: CliOptions): Promise<void> {
-  const payload = await apiGet(options, "/v1/status");
-  render("AgentsPay status", payload, options);
-}
-
-async function handleBalance(options: CliOptions): Promise<void> {
-  const payload = await apiGet(options, "/v1/balances");
-  render("AgentsPay balance", payload, options);
-}
-
-async function handleEndpointsList(options: CliOptions): Promise<void> {
-  const payload = await apiGet(options, "/v1/endpoints");
-  render("AgentsPay endpoints", payload, options);
-}
-
-function handleDemo(options: CliOptions): void {
-  const steps = [
-    "Initialize sandbox client defaults.",
-    "Request a protected endpoint.",
-    "Handle HTTP 402 Payment Required.",
-    "Authorize the returned payment requirement.",
-    "Retry with PAYMENT-SIGNATURE and PAYMENT-RESPONSE headers.",
-    "Verify, settle, and record an audit proof.",
-  ];
-
-  if (options.json) {
-    console.log(
-      JSON.stringify(
-        {
-          command: "demo",
-          mode: options.environment,
-          base_url: options.baseUrl,
-          steps,
-          status: "scaffold",
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
-  console.log("AgentsPay demo");
-  console.log(`mode: ${options.environment}`);
-  console.log(`api: ${options.baseUrl}`);
-  for (const [index, step] of steps.entries()) {
-    console.log(`${index + 1}. ${step}`);
-  }
-}
-
-async function apiGet(options: CliOptions, path: string): Promise<unknown> {
-  const headers = new Headers({
-    Accept: "application/json",
-    "X-AgentsPay-Environment": options.environment,
-  });
-
-  if (options.apiKey !== undefined && options.apiKey.length > 0) {
-    headers.set("Authorization", `Bearer ${options.apiKey}`);
-  }
-
-  const url = `${options.baseUrl}${path}`;
-  if (options.debug) {
-    console.error(`[agentspay] GET ${url}`);
-  }
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers,
-  });
-  const payload = await readPayload(response);
-
-  if (!response.ok) {
-    throw new CliError(`AgentsPay request failed for ${path}`, {
-      status: response.status,
-      details: payload,
-    });
-  }
-
-  return payload;
-}
-
-async function readPayload(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type") ?? "";
-  const text = await response.text();
-  if (text.length === 0) {
-    return null;
-  }
-
-  if (contentType.includes("application/json")) {
-    return JSON.parse(text) as unknown;
-  }
-
+async function run(argv: ReadonlyArray<string>): Promise<void> {
   try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return text;
-  }
-}
-
-function render(title: string, payload: unknown, options: CliOptions): void {
-  if (options.json) {
-    console.log(JSON.stringify(payload, null, 2));
-    return;
-  }
-
-  console.log(title);
-  if (isRecord(payload)) {
-    for (const [key, value] of Object.entries(payload)) {
-      console.log(`${key}: ${formatValue(value)}`);
+    if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
+      printHelp();
+      return;
     }
+    if (argv[0] === "-v" || argv[0] === "--version") {
+      console.log(VERSION);
+      return;
+    }
+
+    const { command, args, globals } = parseArgs(argv);
+    const client = new AgentsPayClient({
+      network: globals.network,
+      ...(globals.mcpBinPath !== undefined && { mcpBinPath: globals.mcpBinPath }),
+      ...(globals.keypairPath !== undefined && { keypairPath: globals.keypairPath }),
+      debug: globals.debug,
+    });
+
+    switch (command) {
+      case "balance":
+        await runBalance(client, globals);
+        break;
+      case "pay-url":
+        await runPayUrl(client, args, globals);
+        break;
+      case "set-budget":
+        await runSetBudget(client, args, globals);
+        break;
+      case "audit-log":
+        await runAuditLog(client, args, globals);
+        break;
+      case "topup-info":
+        await runTopupInfo(client, globals);
+        break;
+      default:
+        fail(`unknown command: ${command}. Run 'agentspay --help'.`);
+    }
+  } catch (err) {
+    handleError(err);
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommands
+// ---------------------------------------------------------------------------
+
+async function runBalance(
+  client: AgentsPayClient,
+  globals: GlobalOptions,
+): Promise<void> {
+  const result = await client.balance();
+  emit(result, globals.json, printBalance);
+}
+
+async function runPayUrl(
+  client: AgentsPayClient,
+  args: ReadonlyArray<string>,
+  globals: GlobalOptions,
+): Promise<void> {
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const url = positional[0];
+  if (url === undefined) {
+    fail("pay-url requires a URL argument");
+  }
+  const max = readFlag(args, "--max") ?? readFlag(args, "--max-amount-usdc");
+  if (max === undefined) {
+    fail("pay-url requires --max <usdc>");
+  }
+  const result = await client.payUrl({ url, maxAmountUsdc: max });
+  emit(result, globals.json, printPayUrl);
+}
+
+async function runSetBudget(
+  client: AgentsPayClient,
+  args: ReadonlyArray<string>,
+  globals: GlobalOptions,
+): Promise<void> {
+  const dailyRaw = readFlag(args, "--daily");
+  const perCallRaw = readFlag(args, "--per-call");
+  if (dailyRaw === undefined || perCallRaw === undefined) {
+    fail("set-budget requires --daily <usd> and --per-call <usd>");
+  }
+  const dailyUsd = Number(dailyRaw);
+  const perCallUsd = Number(perCallRaw);
+  if (!Number.isFinite(dailyUsd) || !Number.isFinite(perCallUsd)) {
+    fail("--daily and --per-call must be numeric");
+  }
+  const result = await client.setBudget({ dailyUsd, perCallUsd });
+  emit(result, globals.json, printSetBudget);
+}
+
+async function runAuditLog(
+  client: AgentsPayClient,
+  args: ReadonlyArray<string>,
+  globals: GlobalOptions,
+): Promise<void> {
+  const limitRaw = readFlag(args, "--limit");
+  const limit = limitRaw !== undefined ? Number(limitRaw) : undefined;
+  if (limit !== undefined && !Number.isInteger(limit)) {
+    fail("--limit must be an integer");
+  }
+  const result = await client.auditLog(limit !== undefined ? { limit } : {});
+  emit(result, globals.json, printAuditLog);
+}
+
+async function runTopupInfo(
+  client: AgentsPayClient,
+  globals: GlobalOptions,
+): Promise<void> {
+  const result = await client.topupInfo();
+  emit(result, globals.json, printTopupInfo);
+}
+
+// ---------------------------------------------------------------------------
+// Pretty printers — match the spirit of services/mcp/src/pretty.rs
+// ---------------------------------------------------------------------------
+
+function printBalance(b: BalanceResponse): void {
+  println(`Available     ${green(`${b.available_usdc} USDC`)}`);
+  println(
+    `Today's spend ${b.today_spent_usdc} USDC (cap ${b.daily_cap_usdc}, ${b.budget_remaining_today_usdc} left)`,
+  );
+  println(`Per-call cap  ${b.per_call_cap_usdc} USDC`);
+  println(`Network       ${cyan(b.environment)}`);
+  println(`Pubkey        ${dim(b.solana_pubkey)}`);
+}
+
+function printPayUrl(r: PayUrlResponse): void {
+  if (r.payment_status === "paid") {
+    println(`${green("Paid")} ${r.amount_charged_usdc} USDC for ${r.endpoint}`);
+  } else {
+    println(`${dim("No payment required.")} (${r.endpoint})`);
+  }
+  if (r.transaction !== "") {
+    println(`Tx        ${dim(r.transaction)}`);
+  }
+  if (r.explorer_url !== "") {
+    println(`Solscan   ${cyan(r.explorer_url)}`);
+  }
+  if (r.body !== "") {
+    println(`Response  ${r.body}`);
+  }
+}
+
+function printSetBudget(r: SetBudgetResponse): void {
+  println(`${green("Budget updated")} (${dim(r.updated_at_rfc3339)})`);
+  println(`  Daily      ${r.daily_usd.toFixed(2)} USDC`);
+  println(`  Per-call   ${r.per_call_usd.toFixed(2)} USDC`);
+}
+
+function printAuditLog(r: AuditLogResponse): void {
+  if (r.entries.length === 0) {
+    println(dim("No audit entries."));
     return;
   }
-
-  console.log(formatValue(payload));
+  println(
+    `${pad("ID", 12)}  ${pad("TIMESTAMP", 32)}  ${pad("TOOL", 22)}  ${pad("AMOUNT", 12)}  STATUS`,
+  );
+  for (const e of r.entries) {
+    const amount = e.amount_usdc ? `${e.amount_usdc} USDC` : "-";
+    const status = truncate(e.status, 60);
+    const endpoint = e.endpoint ? dim(` (${e.endpoint})`) : "";
+    println(
+      `${pad(shortId(e.id), 12)}  ${pad(e.timestamp_rfc3339, 32)}  ${pad(e.tool, 22)}  ${pad(amount, 12)}  ${status}${endpoint}`,
+    );
+  }
+  println(dim(`(${r.returned} of ${r.total} entries)`));
 }
+
+function truncate(s: string, width: number): string {
+  if (s.length <= width) return s;
+  return `${s.slice(0, width - 1)}…`;
+}
+
+function printTopupInfo(r: TopupInfoResponse): void {
+  println(`Network        ${cyan(r.network)}`);
+  println(`Pubkey         ${r.pubkey}`);
+  println(`USDC faucet    ${cyan(r.faucet_url)}`);
+  println(`SOL faucet     ${cyan(r.sol_faucet_url)}`);
+  println("");
+  println(r.instructions);
+}
+
+// ---------------------------------------------------------------------------
+// Arg parsing
+// ---------------------------------------------------------------------------
+
+function parseArgs(argv: ReadonlyArray<string>): {
+  readonly command: string;
+  readonly args: ReadonlyArray<string>;
+  readonly globals: GlobalOptions;
+} {
+  const command = argv[0] ?? "";
+  const rest = argv.slice(1);
+
+  const network = (readFlag(rest, "--network") as Network | undefined) ?? "solana-devnet";
+  const mcpBinPath = readFlag(rest, "--bin");
+  const keypairPath = readFlag(rest, "--keypair");
+  const json = rest.includes("--json");
+  const debug = rest.includes("--debug");
+
+  return {
+    command,
+    args: rest,
+    globals: { network, mcpBinPath, keypairPath, json, debug },
+  };
+}
+
+function readFlag(args: ReadonlyArray<string>, name: string): string | undefined {
+  const idx = args.indexOf(name);
+  if (idx === -1 || idx === args.length - 1) return undefined;
+  return args[idx + 1];
+}
+
+// ---------------------------------------------------------------------------
+// Output helpers
+// ---------------------------------------------------------------------------
+
+function emit<T>(value: T, asJson: boolean, pretty: (v: T) => void): void {
+  if (asJson) {
+    println(JSON.stringify(value, null, 2));
+  } else {
+    pretty(value);
+  }
+}
+
+function println(line: string): void {
+  process.stdout.write(`${line}\n`);
+}
+
+function pad(s: string, width: number): string {
+  if (s.length >= width) return s;
+  return s + " ".repeat(width - s.length);
+}
+
+function shortId(id: string): string {
+  if (id.length <= 8) return id;
+  return `${id.slice(0, 8)}...`;
+}
+
+// ANSI helpers — true-color/256-color codes, fall back to plain if stdout is
+// not a TTY or NO_COLOR is set.
+function ansiEnabled(): boolean {
+  if (process.env.NO_COLOR !== undefined) return false;
+  if (process.env.FORCE_COLOR === "1") return true;
+  return process.stdout.isTTY === true;
+}
+
+function wrap(code: string, text: string): string {
+  return ansiEnabled() ? `\x1b[${code}m${text}\x1b[0m` : text;
+}
+
+function green(text: string): string {
+  return wrap("38;5;79", text);
+}
+function cyan(text: string): string {
+  return wrap("38;5;117", text);
+}
+function dim(text: string): string {
+  return wrap("38;5;245", text);
+}
+function red(text: string): string {
+  return wrap("38;5;203", text);
+}
+
+// ---------------------------------------------------------------------------
+// Help + errors
+// ---------------------------------------------------------------------------
 
 function printHelp(): void {
-  console.log(`AgentsPay CLI
+  println(`agentspay ${VERSION} — local USDC wallet for AI agents
 
 Usage:
-  agentspay status [--base-url URL] [--json]
-  agentspay demo [--sandbox|--live] [--json]
-  agentspay balance [--base-url URL] [--json]
-  agentspay endpoints list [--base-url URL] [--json]
+  agentspay <command> [flags]
 
-Environment:
-  AGENTSPAY_BASE_URL   Defaults to ${DEFAULT_BASE_URL}
-  AGENTSPAY_API_KEY    Optional bearer token
-`);
+Commands:
+  balance                                  Show current balance, budget, pubkey
+  pay-url <url> --max <usdc>               Pay an x402-priced URL, return body
+  set-budget --daily <usd> --per-call <usd>  Update spending caps
+  audit-log [--limit N]                    Recent ledger rows
+  topup-info                               Pubkey + faucet URLs
+
+Global flags:
+  --network <sandbox|solana-devnet|solana-mainnet>   default: solana-devnet
+  --bin <path>           path to agentspay-mcp binary
+  --keypair <path>       override AGENTSPAY_KEYPAIR_PATH
+  --json                 raw JSON output for piping
+  --debug                inherit subprocess stderr
+  -h, --help             show this help
+  -v, --version          ${VERSION}
+
+Docs: https://agentspay.dev/docs`);
 }
 
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return JSON.stringify(value, null, 2);
+function fail(message: string): never {
+  process.stderr.write(`${red("error")}: ${message}\n`);
+  process.exit(2);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function handleError(err: unknown): void {
+  if (err instanceof BinaryNotFoundError) {
+    process.stderr.write(`${red("error")}: ${err.message}\n`);
+    return;
+  }
+  if (err instanceof TransportTimeoutError) {
+    process.stderr.write(`${red("timeout")}: ${err.message}\n`);
+    return;
+  }
+  if (err instanceof PerCallCapExceededError) {
+    process.stderr.write(`${red("per-call cap exceeded")}: ${err.message}\n`);
+    return;
+  }
+  if (err instanceof BudgetExceededError) {
+    process.stderr.write(`${red("daily budget exceeded")}: ${err.message}\n`);
+    return;
+  }
+  if (err instanceof X402SettlementError) {
+    process.stderr.write(`${red("settlement failed")}: ${err.message}\n`);
+    return;
+  }
+  if (err instanceof InvalidInputError) {
+    process.stderr.write(`${red("invalid input")}: ${err.message}\n`);
+    return;
+  }
+  if (err instanceof AgentsPayError) {
+    process.stderr.write(`${red(err.code)}: ${err.message}\n`);
+    return;
+  }
+  process.stderr.write(`${red("error")}: ${String(err)}\n`);
 }

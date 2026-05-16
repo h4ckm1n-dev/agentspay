@@ -1,17 +1,39 @@
 {
   "name": "@agentspay/cli",
-  "version": "0.1.0",
-  "description": "AgentsPay developer CLI scaffold.",
+  "version": "0.2.0",
+  "description": "AgentsPay command-line tool — query and operate the local agentspay-mcp wallet from a terminal.",
+  "keywords": [
+    "agentspay",
+    "cli",
+    "mcp",
+    "x402",
+    "solana",
+    "usdc"
+  ],
+  "homepage": "https://agentspay.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/h4ckm1n/agentspay.git",
+    "directory": "packages/cli"
+  },
+  "license": "MIT",
   "type": "module",
   "bin": {
     "agentspay": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {
+    "@agentspay/sdk-js": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

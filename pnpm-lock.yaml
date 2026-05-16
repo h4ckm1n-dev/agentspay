@@ -64,6 +64,10 @@ importers:
         version: 5.9.3
 
   packages/cli:
+    dependencies:
+      '@agentspay/sdk-js':
+        specifier: workspace:*
+        version: link:../sdk-js
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
