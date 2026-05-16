@@ -9,8 +9,8 @@ export interface AgentsPayErrorOptions {
 
 export class AgentsPayError extends Error {
   readonly code: string;
-  readonly status?: number;
-  readonly details?: JsonValue;
+  readonly status: number | undefined;
+  readonly details: JsonValue | undefined;
 
   constructor(message: string, options: AgentsPayErrorOptions = {}) {
     super(message, { cause: options.cause });

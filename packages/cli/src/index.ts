@@ -16,8 +16,8 @@ interface ParsedArgs {
 }
 
 class CliError extends Error {
-  readonly status?: number;
-  readonly details?: unknown;
+  readonly status: number | undefined;
+  readonly details: unknown | undefined;
 
   constructor(message: string, options: { readonly status?: number; readonly details?: unknown } = {}) {
     super(message);

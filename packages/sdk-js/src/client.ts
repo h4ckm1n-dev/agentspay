@@ -27,8 +27,8 @@ export class AgentsPayClient {
   readonly baseUrl: string;
   readonly environment: AgentsPayEnvironment;
 
-  private readonly apiKey?: string;
-  private readonly defaultHeaders?: HeadersInit;
+  private readonly apiKey: string | undefined;
+  private readonly defaultHeaders: HeadersInit | undefined;
   private readonly fetcher: FetchLike;
   private readonly debug: boolean;
 
@@ -224,8 +224,8 @@ export class AgentsPayClient {
     init: {
       readonly method: "GET" | "POST";
       readonly body?: JsonValue;
-      readonly headers?: HeadersInit;
-      readonly idempotencyKey?: string;
+      readonly headers?: HeadersInit | undefined;
+      readonly idempotencyKey?: string | undefined;
     },
   ): Promise<TResponse> {
     const headers = this.buildHeaders(init.headers);
@@ -278,7 +278,7 @@ export class AgentsPayClient {
     return headers;
   }
 
-  private log(message: string, details?: JsonValue): void {
+  private log(message: string, details?: unknown): void {
     if (!this.debug) {
       return;
     }
@@ -429,9 +429,17 @@ function applyPaymentHeaders(headers: Headers, authorization: PaymentAuthorizati
   headers.set("X-AgentsPay-Authorization", authorization.id);
 }
 
+interface PaymentRequirementFallback {
+  readonly id?: string | undefined;
+  readonly amount?: string | undefined;
+  readonly currency?: string | undefined;
+  readonly endpointId?: string | undefined;
+  readonly description?: string | undefined;
+}
+
 function coercePaymentRequirement(
   value: unknown,
-  fallback: Partial<PaymentRequirement>,
+  fallback: PaymentRequirementFallback,
 ): PaymentRequirement {
   const record = isRecord(value) ? value : {};
   const id = readString(record, "id") ?? fallback.id ?? createIdempotencyKey("req");

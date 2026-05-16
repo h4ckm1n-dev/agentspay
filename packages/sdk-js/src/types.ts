@@ -17,133 +17,133 @@ export type FetchLike = (
 ) => Promise<Response>;
 
 export interface AgentsPayClientOptions {
-  readonly baseUrl?: string;
-  readonly apiKey?: string;
-  readonly environment?: AgentsPayEnvironment;
-  readonly defaultHeaders?: HeadersInit;
-  readonly fetch?: FetchLike;
-  readonly debug?: boolean;
+  readonly baseUrl?: string | undefined;
+  readonly apiKey?: string | undefined;
+  readonly environment?: AgentsPayEnvironment | undefined;
+  readonly defaultHeaders?: HeadersInit | undefined;
+  readonly fetch?: FetchLike | undefined;
+  readonly debug?: boolean | undefined;
 }
 
 export interface RequestOptions {
-  readonly idempotencyKey?: string;
-  readonly headers?: HeadersInit;
+  readonly idempotencyKey?: string | undefined;
+  readonly headers?: HeadersInit | undefined;
 }
 
 export interface HealthResponse {
   readonly status: string;
-  readonly service?: string;
-  readonly environment?: string;
-  readonly version?: string;
+  readonly service?: string | undefined;
+  readonly environment?: string | undefined;
+  readonly version?: string | undefined;
   readonly [key: string]: JsonValue | undefined;
 }
 
 export interface StatusResponse {
   readonly status: string;
-  readonly environment?: string;
-  readonly ledger?: JsonObject;
-  readonly settlement?: JsonObject;
+  readonly environment?: string | undefined;
+  readonly ledger?: JsonObject | undefined;
+  readonly settlement?: JsonObject | undefined;
   readonly [key: string]: JsonValue | undefined;
 }
 
 export interface PaymentRequirementInput {
   readonly amount: string;
-  readonly currency?: CurrencyCode;
-  readonly endpointId?: string;
-  readonly method?: string;
-  readonly path?: string;
-  readonly url?: string;
-  readonly description?: string;
-  readonly payerAgentId?: string;
-  readonly metadata?: JsonObject;
-  readonly idempotencyKey?: string;
+  readonly currency?: CurrencyCode | undefined;
+  readonly endpointId?: string | undefined;
+  readonly method?: string | undefined;
+  readonly path?: string | undefined;
+  readonly url?: string | undefined;
+  readonly description?: string | undefined;
+  readonly payerAgentId?: string | undefined;
+  readonly metadata?: JsonObject | undefined;
+  readonly idempotencyKey?: string | undefined;
 }
 
 export interface PaymentRequirement {
   readonly id: string;
   readonly amount: string;
   readonly currency: string;
-  readonly endpointId?: string;
-  readonly description?: string;
-  readonly expiresAt?: string;
-  readonly paymentUrl?: string;
-  readonly x402?: JsonObject;
-  readonly metadata?: JsonObject;
+  readonly endpointId?: string | undefined;
+  readonly description?: string | undefined;
+  readonly expiresAt?: string | undefined;
+  readonly paymentUrl?: string | undefined;
+  readonly x402?: JsonObject | undefined;
+  readonly metadata?: JsonObject | undefined;
   readonly [key: string]: JsonValue | undefined;
 }
 
 export interface AuthorizePaymentOptions extends RequestOptions {
-  readonly maxAmount?: string;
-  readonly payerAgentId?: string;
-  readonly metadata?: JsonObject;
+  readonly maxAmount?: string | undefined;
+  readonly payerAgentId?: string | undefined;
+  readonly metadata?: JsonObject | undefined;
 }
 
 export interface PaymentAuthorization {
   readonly id: string;
-  readonly requirementId?: string;
-  readonly status?: string;
-  readonly paymentSignature?: string;
-  readonly paymentHeader?: string;
-  readonly expiresAt?: string;
-  readonly idempotencyKey?: string;
-  readonly raw?: JsonObject;
+  readonly requirementId?: string | undefined;
+  readonly status?: string | undefined;
+  readonly paymentSignature?: string | undefined;
+  readonly paymentHeader?: string | undefined;
+  readonly expiresAt?: string | undefined;
+  readonly idempotencyKey?: string | undefined;
+  readonly raw?: JsonObject | undefined;
   readonly [key: string]: JsonValue | undefined;
 }
 
 export interface VerifyPaymentInput {
   readonly requirement: PaymentRequirement;
   readonly authorization: PaymentAuthorization;
-  readonly idempotencyKey?: string;
-  readonly metadata?: JsonObject;
+  readonly idempotencyKey?: string | undefined;
+  readonly metadata?: JsonObject | undefined;
 }
 
 export interface PaymentVerification {
-  readonly id?: string;
+  readonly id?: string | undefined;
   readonly accepted: boolean;
-  readonly status?: string;
-  readonly reason?: string;
-  readonly raw?: JsonObject;
+  readonly status?: string | undefined;
+  readonly reason?: string | undefined;
+  readonly raw?: JsonObject | undefined;
   readonly [key: string]: JsonValue | undefined;
 }
 
 export interface SettlePaymentInput {
-  readonly requirement?: PaymentRequirement;
+  readonly requirement?: PaymentRequirement | undefined;
   readonly authorization: PaymentAuthorization;
-  readonly verification?: PaymentVerification;
-  readonly idempotencyKey?: string;
-  readonly metadata?: JsonObject;
+  readonly verification?: PaymentVerification | undefined;
+  readonly idempotencyKey?: string | undefined;
+  readonly metadata?: JsonObject | undefined;
 }
 
 export interface PaymentSettlement {
-  readonly id?: string;
+  readonly id?: string | undefined;
   readonly status: string;
-  readonly transactionId?: string;
-  readonly auditProofId?: string;
-  readonly raw?: JsonObject;
+  readonly transactionId?: string | undefined;
+  readonly auditProofId?: string | undefined;
+  readonly raw?: JsonObject | undefined;
   readonly [key: string]: JsonValue | undefined;
 }
 
 export interface PayAndCallInput {
   readonly url: string;
-  readonly method?: string;
-  readonly headers?: HeadersInit;
-  readonly body?: JsonValue | BodyInit;
-  readonly maxAmount?: string;
-  readonly currency?: CurrencyCode;
-  readonly endpointId?: string;
-  readonly description?: string;
-  readonly paymentRequirement?: PaymentRequirement;
-  readonly idempotencyKey?: string;
-  readonly retryOn402?: boolean;
-  readonly settle?: boolean;
-  readonly fetchOptions?: Omit<RequestInit, "body" | "headers" | "method">;
+  readonly method?: string | undefined;
+  readonly headers?: HeadersInit | undefined;
+  readonly body?: JsonValue | BodyInit | undefined;
+  readonly maxAmount?: string | undefined;
+  readonly currency?: CurrencyCode | undefined;
+  readonly endpointId?: string | undefined;
+  readonly description?: string | undefined;
+  readonly paymentRequirement?: PaymentRequirement | undefined;
+  readonly idempotencyKey?: string | undefined;
+  readonly retryOn402?: boolean | undefined;
+  readonly settle?: boolean | undefined;
+  readonly fetchOptions?: Omit<RequestInit, "body" | "headers" | "method"> | undefined;
 }
 
 export interface PayAndCallResult<TData = unknown> {
   readonly response: Response;
   readonly data: TData | null;
   readonly paymentRequired: boolean;
-  readonly requirement?: PaymentRequirement;
-  readonly authorization?: PaymentAuthorization;
-  readonly settlement?: PaymentSettlement;
+  readonly requirement?: PaymentRequirement | undefined;
+  readonly authorization?: PaymentAuthorization | undefined;
+  readonly settlement?: PaymentSettlement | undefined;
 }
