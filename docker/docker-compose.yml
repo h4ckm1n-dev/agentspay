@@ -35,6 +35,11 @@ services:
       AGENTSPAY_PAID_ENDPOINT_URL: http://paid-endpoint:3001
       AGENTSPAY_DEVNET_WALLET_PATH: /data/devnet-wallet.json
       AGENTSPAY_DEVNET_LEDGER_PATH: /data/devnet-ledger.db
+      # Force ANSI escapes on the spawned agentspay-mcp's stderr.
+      # `docker compose logs` renders them fine, but stderr is not a TTY,
+      # so the default isatty() check would strip color. FORCE_COLOR is
+      # the standard convention (Node, Vite, Cargo, etc.) for this.
+      FORCE_COLOR: "1"
     volumes:
       - wallet-data:/data
     depends_on:
