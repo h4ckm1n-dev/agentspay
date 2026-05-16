@@ -297,6 +297,22 @@ impl AgentsPayServer {
         // at http://localhost:3001, or inside a Docker compose network where
         // services reach each other by short DNS name).
         if let Err(reason) = validate_url_host_for_ssrf(&parsed) {
+            // Audit SSRF rejections — operator-visible signal that an agent
+            // tried to hit an internal host. Best-effort write so a DB
+            // failure here does not mask the security rejection.
+            let _ = self
+                .repo
+                .insert_audit_entry(new_audit(
+                    DEFAULT_AGENT_ID,
+                    "agentspay_pay_url",
+                    Some(req.url.clone()),
+                    None,
+                    format!(
+                        "rejected reason=ssrf-guard host={:?} detail={reason}",
+                        parsed.host_str()
+                    ),
+                ))
+                .await;
             pretty::emit_tool_event(
                 "pay_url",
                 env_name,

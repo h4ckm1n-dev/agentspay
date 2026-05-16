@@ -18,6 +18,7 @@ mod devnet_wallet;
 mod error;
 mod handlers;
 mod latest_tx;
+mod origin_guard;
 mod ratelimit;
 mod session;
 mod state;
@@ -26,6 +27,7 @@ mod subprocess;
 use crate::{
     config::Config,
     handlers::{devnet, health, sandbox, stats},
+    origin_guard::{origin_guard, OriginAllowlist},
     session::SessionStore,
     state::AppState,
 };
@@ -59,6 +61,15 @@ async fn main() -> anyhow::Result<()> {
     // Background sweep: every 60s, drop expired sessions and log if any were swept.
     tokio::spawn(sweep_loop(sessions));
 
+    let allowlist = OriginAllowlist::from_env();
+    if allowlist.is_enabled() {
+        tracing::info!("origin guard active");
+    } else {
+        tracing::warn!(
+            "origin guard disabled (AGENTSPAY_ALLOWED_ORIGINS unset) — only safe for local dev"
+        );
+    }
+
     let app = Router::new()
         .route("/api/health", get(health::health))
         .route("/api/sandbox/session", post(sandbox::create_session))
@@ -66,6 +77,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/devnet/trigger", post(devnet::trigger))
         .route("/api/devnet/wallet-status", get(devnet::wallet_status))
         .route("/api/stats/latest-tx", get(stats::latest_tx))
+        .layer(axum::middleware::from_fn_with_state(
+            allowlist,
+            origin_guard,
+        ))
         .with_state(state);
 
     tracing::info!(addr = %listen_addr, "agentspay-web-shim listening");

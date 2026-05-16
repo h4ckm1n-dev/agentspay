@@ -69,6 +69,12 @@ jobs:
       - name: Frontend build
         run: pnpm --filter frontend build
 
+      - name: SDK typecheck + tests
+        run: pnpm --filter @agentspay/sdk-js test
+
+      - name: CLI typecheck + build
+        run: pnpm --filter @agentspay/cli build
+
   docker:
     name: Build & Publish Docker Images
     runs-on: ubuntu-latest

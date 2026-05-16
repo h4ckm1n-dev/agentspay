@@ -32,6 +32,7 @@ const TOC = [
   ["install", "Install"],
   ["hosts", "MCP hosts"],
   ["first-run", "First run"],
+  ["sdk-cli", "SDK and CLI"],
   ["tools", "Tools"],
   ["flow", "Payment flow"],
   ["policy", "Budgets and ledger"],
@@ -236,6 +237,16 @@ const ENV_VARS = [
     "https://x402.org/facilitator",
     "Facilitator base URL when enabled.",
   ],
+  [
+    "AGENTSPAY_ALLOW_PRIVATE_HOSTS",
+    "unset (= disabled)",
+    "When set to 1, allow pay_url to fetch loopback / RFC1918 / link-local hosts. Required for local dev against the demo provider; never set in production.",
+  ],
+  [
+    "AGENTSPAY_ALLOWED_ORIGINS",
+    "unset (= origin guard disabled)",
+    "Comma-separated allowlist of browser origins for mutating shim endpoints. Production should set this to your deployed frontend origin.",
+  ],
 ] as const;
 
 const TROUBLE = [
@@ -437,7 +448,58 @@ Pay http://localhost:3001/real-quote/AAPL with max_amount_usdc 0.25.`}
             />
           </DocSection>
 
-          <DocSection id="tools" eyebrow="05" title="Tool Reference">
+          <DocSection id="sdk-cli" eyebrow="05" title="TypeScript SDK and CLI">
+            <p className="mb-4 max-w-3xl text-sm leading-relaxed text-fg-muted">
+              The MCP binary is the primary surface, but you don&apos;t need an
+              MCP host to use AgentsPay. Two npm packages wrap the binary:
+              <code className="mx-1 rounded bg-bg-elev px-1.5 py-0.5 font-mono text-xs">
+                @agentspay/sdk-js
+              </code>{" "}
+              for Node.js apps, and
+              <code className="mx-1 rounded bg-bg-elev px-1.5 py-0.5 font-mono text-xs">
+                @agentspay/cli
+              </code>{" "}
+              for a terminal command.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <CodePanel
+                title="TypeScript SDK"
+                code={`pnpm add @agentspay/sdk-js
+# also requires agentspay-mcp on PATH
+
+import { AgentsPayClient } from "@agentspay/sdk-js";
+const client = new AgentsPayClient({ network: "solana-devnet" });
+const balance = await client.balance();
+const r = await client.payUrl({
+  url: "https://api.example.com/quote",
+  maxAmountUsdc: "0.50",
+});`}
+              />
+              <CodePanel
+                title="CLI"
+                code={`pnpm add -g @agentspay/cli
+agentspay --help
+
+agentspay balance
+agentspay pay-url <url> --max 0.50
+agentspay set-budget --daily 25 --per-call 1
+agentspay audit-log --limit 5
+agentspay topup-info
+# add --json for raw output`}
+              />
+            </div>
+            <Callout title="Same binary under the hood">
+              Both the SDK and CLI spawn the same{" "}
+              <code className="font-mono text-fg">agentspay-mcp</code> binary as
+              a subprocess and talk JSON-RPC over stdio. Whatever your MCP host
+              sees, the SDK and CLI see the same. Typed errors
+              (BudgetExceededError, PerCallCapExceededError,
+              X402SettlementError, ...) let you handle each failure mode
+              discretely.
+            </Callout>
+          </DocSection>
+
+          <DocSection id="tools" eyebrow="06" title="Tool Reference">
             <div className="space-y-5">
               {TOOL_REFERENCE.map((tool) => (
                 <ToolCard key={tool.name} tool={tool} />
@@ -445,7 +507,7 @@ Pay http://localhost:3001/real-quote/AAPL with max_amount_usdc 0.25.`}
             </div>
           </DocSection>
 
-          <DocSection id="flow" eyebrow="06" title="Payment Flow">
+          <DocSection id="flow" eyebrow="07" title="Payment Flow">
             <StepList
               items={[
                 "agentspay_pay_url validates the URL and max_amount_usdc.",
@@ -469,7 +531,7 @@ Pay http://localhost:3001/real-quote/AAPL with max_amount_usdc 0.25.`}
 
           <DocSection
             id="policy"
-            eyebrow="07"
+            eyebrow="08"
             title="Budgets, Ledger, And Audit Proof"
           >
             <div className="grid gap-4 md:grid-cols-2">
@@ -501,7 +563,7 @@ seaql_migrations`}
             />
           </DocSection>
 
-          <DocSection id="devnet" eyebrow="08" title="Devnet Funding">
+          <DocSection id="devnet" eyebrow="09" title="Devnet Funding">
             <p>
               Devnet settlement needs two balances on the signer: SOL for fees
               and USDC for the SPL transfer. Circle&apos;s USDC faucet requires
@@ -528,7 +590,7 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
             />
           </DocSection>
 
-          <DocSection id="docker" eyebrow="09" title="Website Demo Stack">
+          <DocSection id="docker" eyebrow="10" title="Website Demo Stack">
             <p>
               The public demo does not reimplement the product in JavaScript.
               Browser requests go through a Rust shim that spawns the same MCP
@@ -566,7 +628,7 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
             </div>
           </DocSection>
 
-          <DocSection id="env" eyebrow="10" title="Environment Variables">
+          <DocSection id="env" eyebrow="11" title="Environment Variables">
             <div className="overflow-x-auto rounded-md border border-border">
               <div className="min-w-[900px]">
                 <div className="grid grid-cols-[1fr_1fr_1.6fr] border-b border-border-subtle bg-bg-elev px-4 py-3 font-mono text-xs text-fg-muted">
@@ -588,33 +650,63 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
             </div>
           </DocSection>
 
-          <DocSection id="security" eyebrow="11" title="Security Model">
+          <DocSection id="security" eyebrow="12" title="Security Model">
+            <p className="mb-5 max-w-3xl text-sm leading-relaxed text-fg-muted">
+              The agent{" "}
+              <span className="text-fg">cannot drain your wallet</span>. The
+              full threat model, every finding, and the adversarial test suite
+              live in{" "}
+              <a
+                href="https://github.com/h4ckm1n/agentspay/blob/main/SECURITY-AUDIT.md"
+                className="text-accent underline-offset-4 hover:underline"
+              >
+                SECURITY-AUDIT.md
+              </a>
+              . Highlights below.
+            </p>
             <div className="grid gap-4 md:grid-cols-2">
               <Fact
-                title="Local key custody"
-                body="The signer is generated locally and written with owner-only permissions on Unix."
+                title="Per-call + daily caps"
+                body="agentspay_pay_url checks both caps before signing. Even an attacker-controlled URL can extract at most per_call_usd per call and daily_usd per day."
               />
               <Fact
-                title="No stdout logging"
-                body="MCP JSON-RPC uses stdout. Human-readable startup and tool events are written to stderr."
+                title="SSRF guard"
+                body="URLs that resolve to loopback, RFC1918, link-local (incl. AWS/GCP IMDS at 169.254.169.254), CGNAT, or IPv6 ULA are rejected. Opt-out via AGENTSPAY_ALLOW_PRIVATE_HOSTS=1 for local dev."
               />
               <Fact
-                title="Least privilege by default"
-                body="The agent gets five tools, not a broad wallet API or a raw private key."
+                title="Asset + decimals validated"
+                body="A malicious x402 seller cannot inflate the transfer by quoting funky decimals or a non-USDC mint. Validators reject decimals != 6 and asset != USDC mint in real-signing modes."
               />
               <Fact
-                title="Devnet first"
-                body="Mainnet exists as a mode enum, but the shipped product and docs keep mainnet out of the happy path."
+                title="1 MiB body cap"
+                body="Both the 402 probe and the post-payment retry read at most 1 MiB. No OOM from an attacker streaming gigabytes."
+              />
+              <Fact
+                title="Local key custody, 0600"
+                body="The signer is generated locally at ~/.agentspay/keypair.json with owner-only permissions on Unix. Never logged, never sent over the wire."
+              />
+              <Fact
+                title="Non-root containers"
+                body="All three Docker images run as uid 10001 (agentspay) or uid 1000 (node). No root inside any container."
+              />
+              <Fact
+                title="Real-IP rate limits"
+                body="Public web-shim rate-limits on the real client IP via X-Forwarded-For (Caddy strips client-provided values). Per-IP, not global."
+              />
+              <Fact
+                title="Origin guard"
+                body="Mutating shim endpoints require an allowlisted Origin header when AGENTSPAY_ALLOWED_ORIGINS is set. Defense in depth against cross-origin CSRF-like attacks."
               />
             </div>
             <Callout title="Trust boundary">
               The MCP host is the local auth boundary for v0.3. There is no
               multi-tenant server, no dashboard auth, no webhook delivery, and
-              no production custody service in this release.
+              no production custody service in this release. Mainnet is gated
+              behind a v0.5 compliance review.
             </Callout>
           </DocSection>
 
-          <DocSection id="troubleshooting" eyebrow="12" title="Troubleshooting">
+          <DocSection id="troubleshooting" eyebrow="13" title="Troubleshooting">
             <div className="space-y-3">
               {TROUBLE.map((item) => (
                 <Trouble key={item.symptom} {...item} />
@@ -622,7 +714,7 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
             </div>
           </DocSection>
 
-          <DocSection id="commands" eyebrow="13" title="Developer Commands">
+          <DocSection id="commands" eyebrow="14" title="Developer Commands">
             <div className="grid gap-4 md:grid-cols-2">
               <CodePanel
                 title="Rust"

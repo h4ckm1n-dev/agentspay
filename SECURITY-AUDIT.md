@@ -120,13 +120,18 @@ Out of scope for this audit: physical access, the host OS, the Solana RPC provid
 
 Total: 43 Rust unit tests + 10 TypeScript unit tests in CI.
 
-## What this audit did NOT cover (deferred)
+## Follow-ups landed after the initial audit
 
-- **Browser fuzzing of the public API.** A targeted scan with Burp or zaproxy against the deployed shim. Sub-bullet: CORS preflight behavior under various Origin headers.
+- **SSRF rejections are now audited.** A previous gap: a denied URL never wrote an audit-log entry, so operators couldn't see "agent X tried to probe 169.254.169.254 at time T." Fixed in `agentspay_pay_url` — every SSRF rejection now writes a `reason=ssrf-guard host=... detail=...` audit entry before returning the error.
+- **CSRF / Origin guard middleware** lives in `services/web-shim/src/origin_guard.rs`. When `AGENTSPAY_ALLOWED_ORIGINS` is set, mutating endpoints (POST/PUT/DELETE/PATCH) require an `Origin` header whose value is on the comma-separated allowlist. GET / HEAD / OPTIONS are unconstrained. Defense in depth alongside the per-client-IP rate limit (CRIT-4) against a `<form action="...">` attack where attacker.com tries to drain the public demo wallet through a victim's browser. The guard is disabled by default; production must set the env var to the deployed frontend origin (e.g. `https://agentspay.dev`).
+- **CI runs the SDK + CLI test suite.** `.github/workflows/ci.yml` now invokes `pnpm --filter @agentspay/sdk-js test` and `pnpm --filter @agentspay/cli build` on every push so the TypeScript-side regressions are caught before they ship.
+
+## What this audit did NOT cover (still deferred)
+
+- **Browser fuzzing of the public API.** A targeted scan with Burp or zaproxy against the deployed shim.
 - **Time-of-check vs time-of-use on the keypair file** beyond the steady-state mode test.
 - **Cross-container privilege boundaries** under a hostile compose deployment (e.g., what if redis is compromised, can it reach the shim's `/data` volume? Answer: no by default, redis runs in its own container with a separate volume, but worth a follow-up validation in production).
 - **Solana RPC failure modes.** What happens if the RPC sends an attacker-controlled response to `get_latest_blockhash`? The blockhash is consumed by `Transaction::new_signed_with_payer` and signed; the signer can't be tricked into anything beyond using a wrong/stale blockhash, which causes the tx to fail. Worth a code review but not in this pass.
-- **CSRF on the web-shim**. The shim has no auth/cookies, so traditional CSRF doesn't apply. But a CSRF-like attack where attacker.com calls `/api/devnet/trigger` from a victim's browser is now limited by the per-victim-IP rate-limit (after CRIT-4 fix). Still worth tightening with an Origin/Referer check; deferred.
 
 ## How to maintain this audit
 

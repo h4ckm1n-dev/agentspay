@@ -102,6 +102,7 @@ The agent **cannot drain your wallet** because:
 - Response bodies from paid endpoints are **size-capped at 1 MiB** so a malicious seller cannot OOM the agent.
 - The keypair lives at `~/.agentspay/keypair.json` mode `0600`; the file is never logged.
 - Public demo (web-shim) rate-limits via the **real client IP from `X-Forwarded-For`**, not the direct peer (which would be Caddy in production).
+- Browser-side **Origin guard** on mutating endpoints when `AGENTSPAY_ALLOWED_ORIGINS` is set — required for production deployments.
 - Containers run as **non-root** (uid 10001 for Rust services, uid 1000 / `node` for the Next.js image).
 
 The full audit, including known-accepted risks and the adversarial test suite, lives in [SECURITY-AUDIT.md](SECURITY-AUDIT.md). Run the regression suite with `cargo test --workspace` (43 Rust tests + 10 TypeScript tests cover every fix above).
