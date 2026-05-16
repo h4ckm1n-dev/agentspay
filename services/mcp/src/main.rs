@@ -292,6 +292,22 @@ impl AgentsPayServer {
                 Some(json!({ "field": "url", "scheme": parsed.scheme() })),
             ));
         }
+        // SSRF guard. Reject obvious internal targets unless the operator
+        // explicitly opted in (e.g. for local dev against the demo provider
+        // at http://localhost:3001, or inside a Docker compose network where
+        // services reach each other by short DNS name).
+        if let Err(reason) = validate_url_host_for_ssrf(&parsed) {
+            pretty::emit_tool_event(
+                "pay_url",
+                env_name,
+                start.elapsed().as_millis(),
+                pretty::ToolOutcome::Err("url rejected by ssrf guard"),
+            );
+            return Err(McpError::invalid_params(
+                format!("url rejected: {reason}. Set AGENTSPAY_ALLOW_PRIVATE_HOSTS=1 only on hosts you trust to expose internal services through this MCP."),
+                Some(json!({ "field": "url", "host": parsed.host_str(), "reason": reason })),
+            ));
+        }
         let max_amount: f64 = match req.max_amount_usdc.parse() {
             Ok(v) => v,
             Err(e) => {
@@ -798,6 +814,123 @@ fn validate_positive_amount(field: &'static str, value: f64) -> Result<(), McpEr
     Ok(())
 }
 
+/// True when the operator has opted in to allowing private/loopback hosts
+/// via `AGENTSPAY_ALLOW_PRIVATE_HOSTS=1`. Read at call time so the test
+/// suite can exercise the validator without env-var leakage between
+/// parallel tests.
+fn allow_private_hosts() -> bool {
+    matches!(
+        std::env::var("AGENTSPAY_ALLOW_PRIVATE_HOSTS")
+            .ok()
+            .as_deref()
+            .map(str::trim),
+        Some("1") | Some("true") | Some("TRUE") | Some("yes")
+    )
+}
+
+/// SSRF guard: refuse to fetch URLs that resolve to loopback, link-local,
+/// or RFC1918 private ranges. Defends against a prompt-injection or
+/// malicious-LLM scenario where the agent is steered toward internal
+/// services (Redis, Postgres, cloud metadata endpoints, etc.).
+///
+/// `allow_private=true` skips the guard — used for local development or
+/// Docker-compose networks where the demo provider is intentionally on a
+/// private hostname.
+fn validate_url_host_for_ssrf_inner(
+    url: &url::Url,
+    allow_private: bool,
+) -> Result<(), &'static str> {
+    if allow_private {
+        return Ok(());
+    }
+    let host = url.host_str().ok_or("missing host")?;
+    let host_lower = host.to_ascii_lowercase();
+
+    // Block obvious internal hostnames. Hosts that resolve later via DNS are
+    // checked at the IP layer below by reqwest's resolver indirectly — but
+    // the most common attack vectors (literal "localhost", "metadata.google",
+    // etc.) are caught here without paying for a DNS round-trip.
+    const BLOCKED_HOSTS: &[&str] = &[
+        "localhost",
+        "ip6-localhost",
+        "ip6-loopback",
+        "metadata.google.internal",
+        "metadata",
+    ];
+    if BLOCKED_HOSTS.contains(&host_lower.as_str()) {
+        return Err("hostname is in the loopback/metadata blocklist");
+    }
+    if host_lower.ends_with(".internal") || host_lower.ends_with(".localhost") {
+        return Err("hostname suffix is in the internal blocklist");
+    }
+
+    // `url.host_str()` returns IPv6 addresses *with* their brackets
+    // (e.g. "[::1]"), which `IpAddr::from_str` cannot parse. Strip them
+    // before delegating to the std-lib helpers.
+    let host_for_ip = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = host_for_ip.parse::<std::net::IpAddr>() {
+        if !is_globally_routable_ip(&ip) {
+            return Err("host resolves to a non-public IP address");
+        }
+    }
+
+    Ok(())
+}
+
+/// Convenience wrapper that reads the env-var opt-out at call time.
+fn validate_url_host_for_ssrf(url: &url::Url) -> Result<(), &'static str> {
+    validate_url_host_for_ssrf_inner(url, allow_private_hosts())
+}
+
+fn is_globally_routable_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            // The std-lib helpers cover loopback (127/8), private
+            // (10/8, 172.16/12, 192.168/16), link-local (169.254/16 —
+            // which catches AWS/GCP IMDS at 169.254.169.254), broadcast,
+            // documentation ranges, and 0.0.0.0/8.
+            if v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_unspecified()
+            {
+                return false;
+            }
+            let oct = v4.octets();
+            // CGNAT 100.64.0.0/10 — not in std-lib `is_private`.
+            if oct[0] == 100 && (oct[1] & 0xC0) == 64 {
+                return false;
+            }
+            // 0.0.0.0/8 reserved.
+            if oct[0] == 0 {
+                return false;
+            }
+            true
+        }
+        std::net::IpAddr::V6(v6) => {
+            if v6.is_loopback() || v6.is_unspecified() {
+                return false;
+            }
+            let seg0 = v6.segments()[0];
+            // Unique local fc00::/7 — first 7 bits = 0xFC or 0xFD.
+            if (seg0 & 0xFE00) == 0xFC00 {
+                return false;
+            }
+            // Link-local fe80::/10.
+            if (seg0 & 0xFFC0) == 0xFE80 {
+                return false;
+            }
+            // IPv4-mapped ::ffff:0:0/96 — fall back to the v4 logic.
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_globally_routable_ip(&std::net::IpAddr::V4(v4));
+            }
+            true
+        }
+    }
+}
+
 fn db_err(e: sea_orm::DbErr) -> McpError {
     McpError::internal_error(format!("database error: {e}"), None)
 }
@@ -952,4 +1085,82 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| McpServerError::Serve(e.to_string()))?;
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(url: &str) -> url::Url {
+        url::Url::parse(url).expect("test url")
+    }
+
+    fn ssrf_block(url: &str) -> Result<(), &'static str> {
+        validate_url_host_for_ssrf_inner(&parse(url), false)
+    }
+
+    fn ssrf_allow(url: &str) -> Result<(), &'static str> {
+        validate_url_host_for_ssrf_inner(&parse(url), true)
+    }
+
+    #[test]
+    fn ssrf_blocks_loopback() {
+        assert!(ssrf_block("http://127.0.0.1/x").is_err());
+        assert!(ssrf_block("http://127.255.255.1/x").is_err());
+        assert!(ssrf_block("http://[::1]/x").is_err());
+        assert!(ssrf_block("http://localhost/x").is_err());
+        assert!(ssrf_block("http://LocalHost:8080/x").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_rfc1918() {
+        assert!(ssrf_block("http://10.0.0.1/x").is_err());
+        assert!(ssrf_block("http://10.255.255.255/x").is_err());
+        assert!(ssrf_block("http://172.16.0.1/x").is_err());
+        assert!(ssrf_block("http://172.31.255.254/x").is_err());
+        assert!(ssrf_block("http://192.168.1.1/x").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_link_local_aws_imds() {
+        // 169.254.169.254 is AWS/GCP metadata. is_link_local catches the whole /16.
+        assert!(ssrf_block("http://169.254.169.254/latest/meta-data/").is_err());
+        assert!(ssrf_block("http://metadata.google.internal/").is_err());
+        assert!(ssrf_block("http://metadata/").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_cgnat_and_zero() {
+        // 100.64/10 — CGNAT shared address space.
+        assert!(ssrf_block("http://100.64.0.1/").is_err());
+        // 0.0.0.0/8.
+        assert!(ssrf_block("http://0.0.0.0/").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_ipv6_link_local_and_ula() {
+        assert!(ssrf_block("http://[fe80::1]/").is_err());
+        assert!(ssrf_block("http://[fc00::1]/").is_err());
+        assert!(ssrf_block("http://[fd12:3456:789a::1]/").is_err());
+    }
+
+    #[test]
+    fn ssrf_allows_public_addresses() {
+        assert!(ssrf_block("https://api.x402.org/").is_ok());
+        assert!(ssrf_block("https://example.com/quote").is_ok());
+        assert!(ssrf_block("http://8.8.8.8/").is_ok());
+        assert!(ssrf_block("http://[2606:4700::1111]/").is_ok());
+    }
+
+    #[test]
+    fn ssrf_opt_out_via_param() {
+        // The env-var opt-out path: when allow_private=true, the guard
+        // becomes a no-op even for the loopback host.
+        assert!(ssrf_allow("http://localhost:3001/").is_ok());
+        assert!(ssrf_allow("http://127.0.0.1/").is_ok());
+    }
 }

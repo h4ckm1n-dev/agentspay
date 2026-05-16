@@ -16,8 +16,12 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+      ca-certificates libssl3 && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 10001 agentspay \
+ && useradd --system --uid 10001 --gid agentspay --shell /usr/sbin/nologin agentspay \
+ && mkdir -p /data && chown agentspay:agentspay /data
 COPY --from=builder /usr/local/bin/agentspay-paid-endpoint-demo /usr/local/bin/agentspay-paid-endpoint-demo
 ENV RUST_LOG=agentspay_paid_endpoint_demo=info
+USER agentspay
 EXPOSE 3001
 ENTRYPOINT ["/usr/local/bin/agentspay-paid-endpoint-demo"]

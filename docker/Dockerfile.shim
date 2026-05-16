@@ -21,11 +21,15 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+      ca-certificates libssl3 && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 10001 agentspay \
+ && useradd --system --uid 10001 --gid agentspay --shell /usr/sbin/nologin agentspay \
+ && mkdir -p /data && chown agentspay:agentspay /data
 COPY --from=builder /usr/local/bin/agentspay-web-shim /usr/local/bin/agentspay-web-shim
 COPY --from=builder /usr/local/bin/agentspay-mcp /usr/local/bin/agentspay-mcp
 ENV AGENTSPAY_MCP_BINARY=/usr/local/bin/agentspay-mcp \
     AGENTSPAY_SHIM_LISTEN_ADDR=0.0.0.0:8080 \
     RUST_LOG=agentspay_web_shim=info,tower_http=info
+USER agentspay
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/agentspay-web-shim"]

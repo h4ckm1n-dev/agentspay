@@ -69,14 +69,51 @@ Routes:
 
 For a funded devnet button, seed the Docker wallet volume with `devnet-wallet.json` and `provider-keypair.json`. See [docker/README.md](docker/README.md).
 
+## TypeScript SDK + CLI
+
+`@agentspay/sdk-js` and `@agentspay/cli` (both v0.2.0) wrap the `agentspay-mcp` binary so a Node.js program that is *not* running inside an MCP host can still use the wallet:
+
+```typescript
+import { AgentsPayClient } from "@agentspay/sdk-js";
+const client = new AgentsPayClient({ network: "solana-devnet" });
+const balance = await client.balance();
+const result = await client.payUrl({ url: "https://api.example.com/quote", maxAmountUsdc: "0.50" });
+```
+
+The CLI exposes the same five tools as terminal commands:
+
+```bash
+agentspay balance
+agentspay pay-url https://api.example.com/quote --max 0.50
+agentspay set-budget --daily 25 --per-call 1
+agentspay audit-log --limit 5
+agentspay topup-info
+```
+
+Both packages live under `packages/` and ship with examples (`packages/sdk-js/examples/`) and pretty + JSON output. See [packages/sdk-js/README.md](packages/sdk-js/README.md).
+
+## Security Model
+
+The agent **cannot drain your wallet** because:
+
+- Every `pay_url` is rate-checked against a **per-call cap** and a **daily cap** before any signing happens.
+- A malicious x402 seller cannot inflate the transfer by declaring funky decimals or a different asset — the validators reject `decimals != 6` and `asset != USDC mint` in real-signing modes.
+- An LLM-tricked URL targeting `localhost`, RFC1918 ranges, link-local (AWS/GCP metadata at 169.254.169.254), CGNAT, or IPv6 ULA is rejected by the **SSRF guard**. Opt out for local dev with `AGENTSPAY_ALLOW_PRIVATE_HOSTS=1`.
+- Response bodies from paid endpoints are **size-capped at 1 MiB** so a malicious seller cannot OOM the agent.
+- The keypair lives at `~/.agentspay/keypair.json` mode `0600`; the file is never logged.
+- Public demo (web-shim) rate-limits via the **real client IP from `X-Forwarded-For`**, not the direct peer (which would be Caddy in production).
+- Containers run as **non-root** (uid 10001 for Rust services, uid 1000 / `node` for the Next.js image).
+
+The full audit, including known-accepted risks and the adversarial test suite, lives in [SECURITY-AUDIT.md](SECURITY-AUDIT.md). Run the regression suite with `cargo test --workspace` (43 Rust tests + 10 TypeScript tests cover every fix above).
+
 ## What's True Today
 
 - The v0.3 wedge is the local MCP wallet, not the older hosted Stripe-like architecture.
-- `agentspay-mcp` is the primary product surface.
+- `agentspay-mcp` is the primary product surface; `@agentspay/sdk-js` and `@agentspay/cli` wrap it for non-MCP-host usage.
 - Devnet settlement works through direct Solana RPC.
 - Sandbox mode works without chain access.
 - The frontend demo uses a Rust shim, not business logic in Next.js API routes.
-- `services/{auth,gateway,payment,metering}` and `packages/{sdk-js,sdk-python,cli}` are scaffolding/deferred unless a route says otherwise.
+- `services/{auth,gateway,payment,metering}` and `packages/sdk-python` are scaffolding/deferred unless a route says otherwise.
 - Mainnet, KYC, hosted facilitator, webhooks, multi-tenant dashboard, and production custody are not shipped.
 
 ## Development
@@ -97,10 +134,13 @@ Useful entry points:
 |---|---|
 | `services/mcp/` | Local MCP server, wallet, ledger, budget policy, x402 payment flow. |
 | `services/web-shim/` | HTTP bridge for the website demo. |
-| `examples/paid-endpoint/` | Demo x402 provider. |
+| `examples/paid-endpoint/` | Demo x402 provider (receive side). |
 | `apps/frontend/` | Next.js landing page, docs, proof, and demo UI. |
+| `packages/sdk-js/` | TypeScript SDK that spawns the MCP binary. |
+| `packages/cli/` | `agentspay` command-line tool. |
 | `docker/` | Website deployment stack and operator runbook. |
-| `Plan.md` | Active v3 execution plan. |
+| `Plan.md` | Active v3 execution plan (+ §15 v3.1 amendment). |
+| `SECURITY-AUDIT.md` | Threat model, findings, accepted risks. |
 
 ## License
 

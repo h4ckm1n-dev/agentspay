@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use axum::{
     extract::{ConnectInfo, State},
+    http::HeaderMap,
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -29,12 +30,14 @@ pub struct SessionResponse {
 
 pub async fn create_session(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<SessionResponse>, ShimError> {
+    let client_ip = super::client_ip(&headers, &addr);
     state
         .ratelimit
         .check(
-            &format!("sandbox-session:{}", addr.ip()),
+            &format!("sandbox-session:{client_ip}"),
             SESSION_RL_MAX,
             SESSION_RL_WINDOW,
         )

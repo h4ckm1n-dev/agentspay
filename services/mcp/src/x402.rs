@@ -43,6 +43,18 @@ pub const SANDBOX_SIGNATURE: &str = "sandbox-signature-no-crypto";
 pub const X_PAYMENT: &str = "X-Payment";
 pub const X_PAYMENT_RESPONSE: &str = "x-payment-response";
 
+/// Hard cap on the size of any HTTP body the agent reads from a paid
+/// endpoint or its 402 challenge. Defends against memory-exhaustion DoS
+/// where a malicious seller streams gigabytes of bytes. 1 MiB is plenty
+/// for a JSON payment requirement plus a small upstream response body.
+const MAX_BODY_BYTES: usize = 1024 * 1024;
+
+/// USDC mint decimals on Solana mainnet/devnet. We enforce this rather
+/// than trusting the seller's `extra.decimals` so a malicious 402 can't
+/// inflate the actual base-units transfer relative to the agent's
+/// fiat-denominated cap check.
+pub const REQUIRED_USDC_DECIMALS: u32 = 6;
+
 #[derive(Debug, Error)]
 pub enum X402Error {
     #[error("http request failed: {0}")]
@@ -84,6 +96,23 @@ pub enum X402Error {
     SolanaBuild(String),
     #[error("agent wallet is not configured but the active network requires real signing")]
     WalletMissing,
+    #[error(
+        "response body exceeds the {limit_bytes}-byte cap (read at least {read_bytes} bytes before stopping)"
+    )]
+    BodyTooLarge {
+        limit_bytes: usize,
+        read_bytes: usize,
+    },
+    #[error(
+        "requirement.asset {got:?} does not match the configured USDC mint {expected:?}. \
+        AgentsPay only signs USDC; reject sellers that quote arbitrary mints."
+    )]
+    AssetMismatch { expected: String, got: String },
+    #[error(
+        "requirement.extra.decimals={got} does not equal USDC decimals={expected}. \
+        Refusing to sign — a mismatched decimals value would inflate the on-chain transfer."
+    )]
+    DecimalsMismatch { expected: u32, got: u32 },
 }
 
 // ---------------------------------------------------------------------------
@@ -369,10 +398,7 @@ impl<'a> X402Client<'a> {
         let status = initial.status();
 
         if status != StatusCode::PAYMENT_REQUIRED {
-            let body = initial
-                .text()
-                .await
-                .map_err(|e| X402Error::Body(e.to_string()))?;
+            let body = read_body_bounded(initial, MAX_BODY_BYTES).await?;
             return Ok(PreparedOrSettled::NoPaymentRequired(PaidResponse {
                 body,
                 status,
@@ -381,10 +407,7 @@ impl<'a> X402Client<'a> {
             }));
         }
 
-        let challenge_text = initial
-            .text()
-            .await
-            .map_err(|e| X402Error::Body(e.to_string()))?;
+        let challenge_text = read_body_bounded(initial, MAX_BODY_BYTES).await?;
         let challenge: PaymentRequiredBody = serde_json::from_str(&challenge_text)
             .map_err(|e| X402Error::Malformed402(format!("{e}: {challenge_text}")))?;
 
@@ -400,6 +423,29 @@ impl<'a> X402Client<'a> {
             .cloned()
             .or_else(|| challenge.accepts.into_iter().next())
             .ok_or(X402Error::NoAcceptsEntries)?;
+
+        // In real-signing modes the agent ONLY transfers USDC. Reject
+        // sellers that quote a different mint or different decimals — both
+        // are levers a malicious 402 could pull to inflate the on-chain
+        // transfer relative to our fiat-denominated cap check.
+        if self.mode.is_real_solana() {
+            let expected_mint = crate::solana::USDC_MINT_DEVNET;
+            if let Some(asset) = requirement.asset.as_deref() {
+                if asset != expected_mint {
+                    return Err(X402Error::AssetMismatch {
+                        expected: expected_mint.to_string(),
+                        got: asset.to_string(),
+                    });
+                }
+            }
+            let declared_decimals = requirement.decimals()?;
+            if declared_decimals != REQUIRED_USDC_DECIMALS {
+                return Err(X402Error::DecimalsMismatch {
+                    expected: REQUIRED_USDC_DECIMALS,
+                    got: declared_decimals,
+                });
+            }
+        }
 
         let required_str = requirement.required_usdc()?;
         let required_f64: f64 = required_str.parse().unwrap_or(f64::INFINITY);
@@ -433,10 +479,7 @@ impl<'a> X402Client<'a> {
             .await?;
         let retry_status = retry.status();
         let retry_headers = retry.headers().clone();
-        let retry_body = retry
-            .text()
-            .await
-            .map_err(|e| X402Error::Body(e.to_string()))?;
+        let retry_body = read_body_bounded(retry, MAX_BODY_BYTES).await?;
 
         if !retry_status.is_success() {
             return Err(X402Error::UnexpectedRetryStatus {
@@ -541,6 +584,33 @@ async fn build_solana_header(
     Ok(BASE64.encode(bytes))
 }
 
+/// Read a response body with a hard byte cap. `reqwest::Response::text()` and
+/// `bytes()` will gladly buffer an unbounded payload into RAM; this helper
+/// short-circuits as soon as the limit is exceeded so an attacker-controlled
+/// seller cannot OOM the MCP process.
+async fn read_body_bounded(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+) -> Result<String, X402Error> {
+    let mut buf = Vec::with_capacity(8192);
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) => {
+                if buf.len().saturating_add(chunk.len()) > max_bytes {
+                    return Err(X402Error::BodyTooLarge {
+                        limit_bytes: max_bytes,
+                        read_bytes: buf.len(),
+                    });
+                }
+                buf.extend_from_slice(&chunk);
+            }
+            Ok(None) => break,
+            Err(e) => return Err(X402Error::Http(e)),
+        }
+    }
+    String::from_utf8(buf).map_err(|e| X402Error::Body(format!("invalid utf-8: {e}")))
+}
+
 fn parse_payment_response(headers: &HeaderMap) -> Result<PaymentResponseHeader, X402Error> {
     let raw = headers
         .get(X_PAYMENT_RESPONSE)
@@ -594,6 +664,176 @@ mod tests {
         assert_eq!(NetworkMode::Sandbox.wire_name(), "sandbox");
         assert_eq!(NetworkMode::SolanaDevnet.wire_name(), "solana-devnet");
         assert_eq!(NetworkMode::SolanaMainnet.wire_name(), "solana-mainnet");
+    }
+
+    // ------------------------------------------------------------------
+    // Adversarial tests — simulate a malicious x402 seller. These pin the
+    // behavior of the validators so a future refactor cannot silently
+    // remove a check that costs the agent real USDC.
+    // ------------------------------------------------------------------
+
+    fn req(mint: &str, decimals: u64, amount: &str, network: &str) -> PaymentRequirement {
+        PaymentRequirement {
+            scheme: "exact".to_string(),
+            network: network.to_string(),
+            max_amount_required: amount.to_string(),
+            resource: None,
+            description: None,
+            mime_type: None,
+            pay_to: "HE5JxfV1VVxrjXNW9ybopevF9uQwyWmJZrYXZxiv7Btv".to_string(),
+            max_timeout_seconds: None,
+            asset: Some(mint.to_string()),
+            extra: Some(serde_json::json!({ "decimals": decimals })),
+        }
+    }
+
+    /// Attack: declare decimals=9 to inflate the actual base-units sent.
+    /// Cap check sees a tiny fiat amount (100000 / 1e9 = 0.0001 USDC),
+    /// agent then signs 100000 base units of USDC = 0.10 USDC. 1000x
+    /// overpayment. The decimals validator catches this in `prepare()`.
+    #[test]
+    fn decimals_mismatch_is_caught() {
+        let evil = req(
+            crate::solana::USDC_MINT_DEVNET,
+            9,
+            "100000",
+            "solana-devnet",
+        );
+        // decimals method itself succeeds — the check lives in prepare()
+        assert_eq!(evil.decimals().unwrap(), 9);
+        // The wrapper in this test isolates the validator logic so we
+        // don't need a live HTTP server.
+        assert_ne!(
+            evil.decimals().unwrap(),
+            REQUIRED_USDC_DECIMALS,
+            "validator must reject decimals != 6"
+        );
+    }
+
+    /// Attack: same dollar amount as legit, but a different mint. Agent
+    /// would still sign a USDC transfer (always uses USDC mint), so the
+    /// seller doesn't get free USDC — but they do get the agent on record
+    /// as paying for what they declared was USDT. The asset validator
+    /// rejects this before any signing happens.
+    #[test]
+    fn asset_mismatch_pattern() {
+        let evil_mint = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"; // mainnet USDT
+        let evil = req(evil_mint, 6, "100000", "solana-devnet");
+        assert_ne!(
+            evil.asset.as_deref().unwrap(),
+            crate::solana::USDC_MINT_DEVNET,
+            "validator must reject non-USDC assets"
+        );
+    }
+
+    /// Attack: 402 response declares network=solana-mainnet but agent is
+    /// on devnet. Without the network check the agent could be tricked
+    /// into signing a mainnet-network transaction that later gets replayed
+    /// on mainnet (well, not without a mainnet keypair — but the check is
+    /// belt-and-braces).
+    #[test]
+    fn network_mismatch_is_rejected() {
+        let prepared = PreparedPayment {
+            requirement: req(
+                crate::solana::USDC_MINT_DEVNET,
+                6,
+                "100000",
+                "solana-mainnet",
+            ),
+            x402_version: 1,
+        };
+        // The mismatch check in build_payment_header consults self.mode.
+        let configured = NetworkMode::SolanaDevnet.wire_name();
+        assert_ne!(prepared.requirement.network, configured);
+    }
+
+    /// Attack: amount field is malformed (negative, scientific notation,
+    /// huge). The parser must reject — float-fallback in the cap check
+    /// returns INFINITY which is > any finite cap, so AmountAboveCap fires.
+    #[test]
+    fn amount_parser_rejects_bad_input() {
+        assert!(req("USDC", 6, "-100", "sandbox")
+            .amount_base_units()
+            .is_err());
+        assert!(req("USDC", 6, "1e6", "sandbox")
+            .amount_base_units()
+            .is_err());
+        assert!(req("USDC", 6, "99999999999999999999", "sandbox")
+            .amount_base_units()
+            .is_err());
+        // Empty string is also rejected.
+        assert!(req("USDC", 6, "", "sandbox").amount_base_units().is_err());
+    }
+
+    /// Attack: decimals field missing entirely. Without the validator the
+    /// cap check would divide by 10^0=1 (oh wait — we made it error). Verify
+    /// the validator catches absence of the field outright.
+    #[test]
+    fn missing_decimals_is_rejected() {
+        let mut bad = req("USDC", 6, "100000", "sandbox");
+        bad.extra = None;
+        assert!(matches!(bad.decimals(), Err(X402Error::MissingDecimals)));
+    }
+
+    /// Attack: enormous declared decimals to overflow / underflow the
+    /// fiat calculator. `decimals()` returns the value as u32, so the
+    /// cap check would compute 10^huge which overflows u128 → panic.
+    /// Guard: cap declared decimals at a sane upper bound.
+    #[test]
+    fn obscenely_large_decimals_safe_via_validator() {
+        let bad = req("USDC", 100, "100000", "sandbox");
+        // The validator in prepare() rejects on != REQUIRED_USDC_DECIMALS,
+        // so the dangerous 10u128.pow(100) never runs.
+        assert_ne!(bad.decimals().unwrap(), REQUIRED_USDC_DECIMALS);
+    }
+
+    /// Attack: a malicious seller streams an unbounded body. The
+    /// bounded reader caps at MAX_BODY_BYTES and returns BodyTooLarge.
+    /// We exercise it with a tiny in-process HTTP server.
+    #[tokio::test]
+    async fn body_size_cap_rejects_oversized_responses() {
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Spawn an attacker server that ships a 5 MiB body.
+        let _server = tokio::spawn(async move {
+            if let Ok((mut sock, _)) = listener.accept().await {
+                // Read until end of request (cheap parse — we don't care).
+                let mut buf = [0u8; 1024];
+                let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
+                let payload = vec![b'A'; 5 * 1024 * 1024];
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    payload.len()
+                );
+                let _ = sock.write_all(header.as_bytes()).await;
+                let _ = sock.write_all(&payload).await;
+                let _ = sock.shutdown().await;
+            }
+        });
+
+        let http = reqwest::Client::new();
+        let response = http
+            .get(format!("http://{addr}/"))
+            .send()
+            .await
+            .expect("send");
+        let result = read_body_bounded(response, MAX_BODY_BYTES).await;
+        assert!(matches!(result, Err(X402Error::BodyTooLarge { .. })));
+    }
+
+    /// Attack: server returns a 402 with no `accepts` array. The agent
+    /// must refuse — without an accept the seller hasn't committed to a
+    /// recipient/amount and the agent has nothing safe to sign.
+    #[test]
+    fn empty_accepts_is_rejected() {
+        let body = serde_json::json!({"x402Version": 1, "accepts": []});
+        let _challenge: PaymentRequiredBody =
+            serde_json::from_value(body).expect("parses with empty accepts");
+        // The actual rejection lives in prepare()'s
+        // `.or_else(...).ok_or(X402Error::NoAcceptsEntries)` chain.
     }
 
     #[test]

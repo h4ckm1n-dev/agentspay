@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use axum::{
     extract::{ConnectInfo, State},
+    http::HeaderMap,
     Json,
 };
 use serde::Serialize;
@@ -26,12 +27,14 @@ const SYMBOLS: &[&str] = &["AAPL", "MSFT", "GOOG", "NVDA", "AMZN"];
 
 pub async fn wallet_status(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<WalletStatus>, ShimError> {
+    let client_ip = super::client_ip(&headers, &addr);
     state
         .ratelimit
         .check(
-            &format!("devnet-status:{}", addr.ip()),
+            &format!("devnet-status:{client_ip}"),
             STATUS_RL_MAX,
             STATUS_RL_WINDOW,
         )
@@ -59,12 +62,14 @@ pub struct TriggerResponse {
 
 pub async fn trigger(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<TriggerResponse>, ShimError> {
+    let client_ip = super::client_ip(&headers, &addr);
     state
         .ratelimit
         .check(
-            &format!("devnet-trigger:{}", addr.ip()),
+            &format!("devnet-trigger:{client_ip}"),
             TRIGGER_RL_MAX,
             TRIGGER_RL_WINDOW,
         )
