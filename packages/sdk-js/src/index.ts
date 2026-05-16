@@ -1,24 +1,34 @@
-export { AgentsPayClient, createIdempotencyKey } from "./client.js";
-export { AgentsPayApiError, AgentsPayError } from "./errors.js";
+export { AgentsPayClient } from "./client.js";
+
+export {
+  AgentsPayError,
+  BinaryNotFoundError,
+  BudgetExceededError,
+  InvalidInputError,
+  NetworkMismatchError,
+  PerCallCapExceededError,
+  ToolError,
+  TransportError,
+  TransportTimeoutError,
+  X402SettlementError,
+  classifyToolError,
+} from "./errors.js";
+
+export type { AgentsPayErrorCode, AgentsPayErrorOptions } from "./errors.js";
+
 export type {
   AgentsPayClientOptions,
-  AgentsPayEnvironment,
-  AuthorizePaymentOptions,
-  CurrencyCode,
-  FetchLike,
-  HealthResponse,
+  AuditEntry,
+  AuditLogInput,
+  AuditLogResponse,
+  BalanceResponse,
   JsonObject,
   JsonPrimitive,
   JsonValue,
-  PayAndCallInput,
-  PayAndCallResult,
-  PaymentAuthorization,
-  PaymentRequirement,
-  PaymentRequirementInput,
-  PaymentSettlement,
-  PaymentVerification,
-  RequestOptions,
-  SettlePaymentInput,
-  StatusResponse,
-  VerifyPaymentInput,
+  Network,
+  PayUrlInput,
+  PayUrlResponse,
+  SetBudgetInput,
+  SetBudgetResponse,
+  TopupInfoResponse,
 } from "./types.js";

@@ -1,149 +1,162 @@
-export type AgentsPayEnvironment = "sandbox" | "live";
+/**
+ * Wire-faithful TypeScript surface for the agentspay-mcp binary.
+ *
+ * Response field names are snake_case to match the JSON the MCP server emits
+ * (see services/mcp/src/main.rs structs). This keeps debugging straight:
+ * what you see in the SDK matches what you see in `audit_log` output, in
+ * MCP server logs, and in the rmcp tool definitions.
+ *
+ * Input arguments are camelCase (TS convention); the client maps them to
+ * snake_case before writing to the JSON-RPC payload.
+ */
 
-export type CurrencyCode = "USDC" | (string & {});
+export type Network = "sandbox" | "solana-devnet" | "solana-mainnet";
 
 export type JsonPrimitive = string | number | boolean | null;
-
 export type JsonValue =
   | JsonPrimitive
   | { readonly [key: string]: JsonValue }
   | readonly JsonValue[];
-
 export type JsonObject = { readonly [key: string]: JsonValue };
 
-export type FetchLike = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response>;
+// ---------------------------------------------------------------------------
+// Client options
+// ---------------------------------------------------------------------------
 
 export interface AgentsPayClientOptions {
-  readonly baseUrl?: string | undefined;
-  readonly apiKey?: string | undefined;
-  readonly environment?: AgentsPayEnvironment | undefined;
-  readonly defaultHeaders?: HeadersInit | undefined;
-  readonly fetch?: FetchLike | undefined;
-  readonly debug?: boolean | undefined;
+  /**
+   * Absolute path to the agentspay-mcp binary. If omitted, the client looks
+   * for `agentspay-mcp` on PATH, then `AGENTSPAY_MCP_BIN`.
+   */
+  readonly mcpBinPath?: string;
+
+  /**
+   * Network the MCP server should target. Sets `AGENTSPAY_NETWORK` on the
+   * subprocess. Defaults to `solana-devnet`.
+   */
+  readonly network?: Network;
+
+  /**
+   * Override the keypair path. Sets `AGENTSPAY_KEYPAIR_PATH`.
+   * Defaults to `~/.agentspay/keypair.json` (resolved by the binary).
+   */
+  readonly keypairPath?: string;
+
+  /**
+   * Override the SQLite ledger URL. Sets `AGENTSPAY_DATABASE_URL`.
+   * Defaults to the binary's own resolution.
+   */
+  readonly databaseUrl?: string;
+
+  /**
+   * Extra environment variables to set on the subprocess.
+   */
+  readonly env?: Readonly<Record<string, string>>;
+
+  /**
+   * Timeout per tool call in milliseconds. Defaults to 30_000 (30s).
+   */
+  readonly callTimeoutMs?: number;
+
+  /**
+   * Emit transport-level debug logs to stderr.
+   */
+  readonly debug?: boolean;
 }
 
-export interface RequestOptions {
-  readonly idempotencyKey?: string | undefined;
-  readonly headers?: HeadersInit | undefined;
-}
+// ---------------------------------------------------------------------------
+// Tool: agentspay_balance
+// ---------------------------------------------------------------------------
 
-export interface HealthResponse {
-  readonly status: string;
-  readonly service?: string | undefined;
-  readonly environment?: string | undefined;
-  readonly version?: string | undefined;
-  readonly [key: string]: JsonValue | undefined;
-}
-
-export interface StatusResponse {
-  readonly status: string;
-  readonly environment?: string | undefined;
-  readonly ledger?: JsonObject | undefined;
-  readonly settlement?: JsonObject | undefined;
-  readonly [key: string]: JsonValue | undefined;
-}
-
-export interface PaymentRequirementInput {
-  readonly amount: string;
-  readonly currency?: CurrencyCode | undefined;
-  readonly endpointId?: string | undefined;
-  readonly method?: string | undefined;
-  readonly path?: string | undefined;
-  readonly url?: string | undefined;
-  readonly description?: string | undefined;
-  readonly payerAgentId?: string | undefined;
-  readonly metadata?: JsonObject | undefined;
-  readonly idempotencyKey?: string | undefined;
-}
-
-export interface PaymentRequirement {
-  readonly id: string;
-  readonly amount: string;
+export interface BalanceResponse {
+  readonly available_usdc: string;
+  readonly budget_remaining_today_usdc: string;
+  readonly daily_cap_usdc: string;
+  readonly per_call_cap_usdc: string;
+  readonly today_spent_usdc: string;
   readonly currency: string;
-  readonly endpointId?: string | undefined;
-  readonly description?: string | undefined;
-  readonly expiresAt?: string | undefined;
-  readonly paymentUrl?: string | undefined;
-  readonly x402?: JsonObject | undefined;
-  readonly metadata?: JsonObject | undefined;
-  readonly [key: string]: JsonValue | undefined;
+  readonly environment: Network;
+  /** Base58 Solana pubkey the agent will sign x402 payments with. */
+  readonly solana_pubkey: string;
 }
 
-export interface AuthorizePaymentOptions extends RequestOptions {
-  readonly maxAmount?: string | undefined;
-  readonly payerAgentId?: string | undefined;
-  readonly metadata?: JsonObject | undefined;
-}
+// ---------------------------------------------------------------------------
+// Tool: agentspay_pay_url
+// ---------------------------------------------------------------------------
 
-export interface PaymentAuthorization {
-  readonly id: string;
-  readonly requirementId?: string | undefined;
-  readonly status?: string | undefined;
-  readonly paymentSignature?: string | undefined;
-  readonly paymentHeader?: string | undefined;
-  readonly expiresAt?: string | undefined;
-  readonly idempotencyKey?: string | undefined;
-  readonly raw?: JsonObject | undefined;
-  readonly [key: string]: JsonValue | undefined;
-}
-
-export interface VerifyPaymentInput {
-  readonly requirement: PaymentRequirement;
-  readonly authorization: PaymentAuthorization;
-  readonly idempotencyKey?: string | undefined;
-  readonly metadata?: JsonObject | undefined;
-}
-
-export interface PaymentVerification {
-  readonly id?: string | undefined;
-  readonly accepted: boolean;
-  readonly status?: string | undefined;
-  readonly reason?: string | undefined;
-  readonly raw?: JsonObject | undefined;
-  readonly [key: string]: JsonValue | undefined;
-}
-
-export interface SettlePaymentInput {
-  readonly requirement?: PaymentRequirement | undefined;
-  readonly authorization: PaymentAuthorization;
-  readonly verification?: PaymentVerification | undefined;
-  readonly idempotencyKey?: string | undefined;
-  readonly metadata?: JsonObject | undefined;
-}
-
-export interface PaymentSettlement {
-  readonly id?: string | undefined;
-  readonly status: string;
-  readonly transactionId?: string | undefined;
-  readonly auditProofId?: string | undefined;
-  readonly raw?: JsonObject | undefined;
-  readonly [key: string]: JsonValue | undefined;
-}
-
-export interface PayAndCallInput {
+export interface PayUrlInput {
   readonly url: string;
-  readonly method?: string | undefined;
-  readonly headers?: HeadersInit | undefined;
-  readonly body?: JsonValue | BodyInit | undefined;
-  readonly maxAmount?: string | undefined;
-  readonly currency?: CurrencyCode | undefined;
-  readonly endpointId?: string | undefined;
-  readonly description?: string | undefined;
-  readonly paymentRequirement?: PaymentRequirement | undefined;
-  readonly idempotencyKey?: string | undefined;
-  readonly retryOn402?: boolean | undefined;
-  readonly settle?: boolean | undefined;
-  readonly fetchOptions?: Omit<RequestInit, "body" | "headers" | "method"> | undefined;
+  /** Maximum USDC to authorize for this call, as a decimal string. */
+  readonly maxAmountUsdc: string;
 }
 
-export interface PayAndCallResult<TData = unknown> {
-  readonly response: Response;
-  readonly data: TData | null;
-  readonly paymentRequired: boolean;
-  readonly requirement?: PaymentRequirement | undefined;
-  readonly authorization?: PaymentAuthorization | undefined;
-  readonly settlement?: PaymentSettlement | undefined;
+export interface PayUrlResponse {
+  readonly status: string;
+  readonly payment_id: string;
+  readonly endpoint: string;
+  readonly amount_charged_usdc: string;
+  readonly ledger_entry_id: string;
+  readonly transaction: string;
+  /** Upstream response body, as a string. */
+  readonly body: string;
+  /** `"paid"` when settlement happened, `"none"` for endpoints that served 200 without ever issuing a 402. */
+  readonly payment_status: "paid" | "none" | string;
+  readonly network: Network;
+  /** Solscan URL for the on-chain TX when applicable; empty otherwise. */
+  readonly explorer_url: string;
 }
+
+// ---------------------------------------------------------------------------
+// Tool: agentspay_set_budget
+// ---------------------------------------------------------------------------
+
+export interface SetBudgetInput {
+  /** Daily spending cap in USD. Must be > 0. */
+  readonly dailyUsd: number;
+  /** Per-call spending cap in USD. Must be > 0. */
+  readonly perCallUsd: number;
+}
+
+export interface SetBudgetResponse {
+  readonly agent_id: string;
+  readonly daily_usd: number;
+  readonly per_call_usd: number;
+  readonly updated_at_rfc3339: string;
+}
+
+// ---------------------------------------------------------------------------
+// Tool: agentspay_audit_log
+// ---------------------------------------------------------------------------
+
+export interface AuditLogInput {
+  /** Number of entries to return. Default 20, max 100. */
+  readonly limit?: number;
+}
+
+export interface AuditEntry {
+  readonly id: string;
+  readonly timestamp_rfc3339: string;
+  readonly tool: string;
+  readonly endpoint?: string;
+  readonly amount_usdc?: string;
+  readonly status: string;
+}
+
+export interface AuditLogResponse {
+  readonly entries: ReadonlyArray<AuditEntry>;
+  readonly total: number;
+  readonly returned: number;
+}
+
+// ---------------------------------------------------------------------------
+// Tool: agentspay_topup_info
+// ---------------------------------------------------------------------------
+
+export interface TopupInfoResponse {
+  readonly pubkey: string;
+  readonly network: Network;
+  readonly faucet_url: string;
+  readonly sol_faucet_url: string;
+  readonly instructions: string;
+}
+

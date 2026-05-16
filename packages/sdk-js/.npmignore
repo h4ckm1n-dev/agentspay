@@ -1,0 +1,7 @@
+src/
+node_modules/
+*.test.js
+*.test.d.ts
+*.test.js.map
+tsconfig.json
+.npmignore
