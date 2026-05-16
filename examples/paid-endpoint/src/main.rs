@@ -540,8 +540,7 @@ async fn submit_via_facilitator(
         .map_err(|e| anyhow::anyhow!("verify response not JSON ({status}): {e}"))?;
     if !status.is_success() {
         return Err(anyhow::anyhow!(
-            "facilitator /verify returned {status}: {}",
-            verify_body
+            "facilitator /verify returned {status}: {verify_body}"
         ));
     }
     let is_valid = verify_body
@@ -571,8 +570,7 @@ async fn submit_via_facilitator(
         .map_err(|e| anyhow::anyhow!("settle response not JSON ({status}): {e}"))?;
     if !status.is_success() {
         return Err(anyhow::anyhow!(
-            "facilitator /settle returned {status}: {}",
-            settle_body
+            "facilitator /settle returned {status}: {settle_body}"
         ));
     }
     let success = settle_body

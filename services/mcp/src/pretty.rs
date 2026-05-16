@@ -21,11 +21,9 @@ use std::path::Path;
 
 /// True when we should emit ANSI SGR escapes on stderr.
 ///
-/// Resolution order (highest precedence first):
-///   1. `NO_COLOR` set            → disable (https://no-color.org/)
-///   2. `FORCE_COLOR` set         → enable (used by Docker / CI / piped renderers
-///                                  that accept ANSI but don't look like a TTY)
-///   3. `std::io::stderr().is_terminal()` → enable only when attached to a TTY
+/// Resolution order, highest precedence first: `NO_COLOR` disables color,
+/// `FORCE_COLOR` enables it for Docker/CI/piped renderers, and otherwise
+/// `std::io::stderr().is_terminal()` decides.
 pub fn supports_ansi() -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
