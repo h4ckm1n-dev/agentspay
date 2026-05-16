@@ -259,3 +259,73 @@ Decision rule: if any "Falsify" cell is hit, run /office-hours again before writ
 - Coinbase CDP facilitator (Solana): https://docs.cdp.coinbase.com/x402/welcome
 - x402 spec: https://www.x402.org/
 - MCP spec: https://modelcontextprotocol.io/specification/2025-06-18
+
+---
+
+# 15. Plan v3.1 Amendment — Website + Hosted Demo (added 2026-05-17)
+
+This section is an *honest* record of scope that was added between 2026-05-13 (when Plan v3 froze) and 2026-05-17 (when this amendment was written). The original v3 plan said "no dashboard, no SDK, no hosted backend." All three were built anyway. This amendment documents *why*, what's now in scope, and how the 30-day kill criteria change as a result.
+
+## 15.1 What changed
+
+| v3 said | v3.1 reality |
+|---|---|
+| `apps/frontend/` deferred to v0.4 | Shipped: marketing site with Hero, Why, Install, ProofStrip, plus `/demo`, `/docs`, `/proof` routes, SiteNav, brand mark |
+| `packages/sdk-js/` deferred to v0.3 | In-progress: typed shim client used by the demo page; not the original "hosted REST SDK" |
+| "No hosted facilitator endpoint" | `services/web-shim/`: Axum HTTP bridge wrapping `agentspay-mcp` stdio with session isolation, sliding-window rate limit, Redis-backed sessions, devnet trigger, latest-tx cache |
+| "No Docker Compose" | `docker/`: 5-service stack (Caddy + web + shim + paid-endpoint + Redis), runbook, operator scripts |
+| "Submit to Anthropic MCP registry" (week 3) | Not started |
+
+## 15.2 Why the scope expanded
+
+The original wedge — "agent dev installs MCP from a registry listing" — assumes registry-discovery alone is sufficient to drive installs. Two observations during execution changed that assumption:
+
+1. **Show, don't tell.** The product is "your agent has a budget-controlled wallet." Reading that in a README is uncompelling; clicking a button that produces a real Solscan-confirmed devnet settlement in ~2 seconds is. The hosted demo exists because the registry listing needs a "Try it now" link with no install required.
+2. **Proof artifacts compound.** Each browser-triggered tx is a permanent, third-party-verifiable record. Three of them are now on the `/proof` page. This is durable conversion material that survives any future ranking change.
+
+This is a deliberate expansion, not feature creep. But it was not in the plan, so it deserves to be in the plan now.
+
+## 15.3 What's *still* out of scope for v0.1
+
+The original v3 non-goals (§11) that remain non-goals:
+
+- Auth / API key service (MCP host remains the auth boundary).
+- gRPC / Tonic anything.
+- REST `/v1/` mutation API surface.
+- Multi-org / multi-tenant.
+- TypeScript or Python SDK for end users (`packages/sdk-js/` is internal shim-client only).
+- Webhook delivery.
+- Mainnet money.
+- KYC / compliance workflow.
+
+The web-shim is *not* a public REST API. It is "the demo backend." It does not get versioned or supported.
+
+## 15.4 Revised kill criteria (replaces §13 for v0.1)
+
+The original kill criteria assumed a Day-1 launch event (MCP registry submission). The hosted demo changes the funnel: visitors land on the website → click the demo → maybe install the MCP binary. So the metrics now distinguish demo engagement from install conversion.
+
+| Metric | Falsify (kill) | Survive (iterate) | Win (double down) |
+|---|---|---|---|
+| Demo-page browser triggers in 30d | < 50 | 50-500 | 500+ |
+| Unique IPs hitting `/api/devnet/trigger` | < 20 | 20-200 | 200+ |
+| MCP binary installs (npm + GitHub Releases) | < 10 | 10-50 | 50+ |
+| Real (non-demo) paid x402 calls | 0 | 1-5 | 5+ |
+| GitHub stars | < 20 | 20-100 | 100+ |
+| Inbound feature requests (issues + DMs) | 0 | 1-5 | 5+ |
+
+**Decision rule unchanged:** if any "Falsify" cell is hit, run /office-hours again before writing more code.
+
+## 15.5 Launch sequence (replaces Week 3 + Week 4 in §8)
+
+The v3 launch sequence assumed binaries-on-Releases + registry-listing was Day Zero. With the website, Day Zero is the website going live on a real domain. New sequence:
+
+- [ ] Deploy `docker/` stack to a VPS with real TLS (Caddy ACME).
+- [ ] Fund the public-demo devnet wallet and provider keypair.
+- [ ] Verify `/api/devnet/trigger` produces a fresh Solscan-confirmed tx end-to-end through the production deploy.
+- [ ] Submit to Anthropic MCP registry, link the website.
+- [ ] Soft launch: Anthropic Discord, then Show HN, then X.
+- [ ] Day-30 review against §15.4 metrics.
+
+## 15.6 What this amendment is *not*
+
+This is not a re-pivot. The MCP-wallet thesis is unchanged. The wedge is unchanged. The product surface (the 5 MCP tools) is unchanged. Only the *distribution path* changed: registry-first became website-first-then-registry. If the website doesn't move install numbers in 30 days, the plan to kill stands.
