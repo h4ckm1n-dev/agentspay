@@ -1,7 +1,11 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./lib/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
@@ -35,6 +39,13 @@ const config: Config = {
           null: "#f87171", // dim red — null
           punct: "#71717a", // dim grey — { } [ ] , : $ =
           cmd: "#fafafa", // bold white — shell command word
+          // 6 domain-aware tokens (Solana / fintech)
+          signature: "#c084fc", // cool-violet — Solana tx signature (base58 86-88)
+          pubkey: "#7dd3fc", // sky-blue — Solana pubkey (base58 32-44)
+          usdc: "#34d399", // mint-green — USDC amount (key-aware)
+          timestamp: "#fcd34d", // amber — RFC3339 timestamp
+          uuid: "#94a3b8", // dim cyan — UUID
+          url: "#10b981", // accent-green — http(s):// URL
         },
       },
       fontFamily: {

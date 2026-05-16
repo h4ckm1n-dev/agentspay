@@ -16,7 +16,14 @@ type JsonTokenKind =
   | "number"
   | "bool"
   | "null"
-  | "whitespace";
+  | "whitespace"
+  // domain-aware kinds (post-processing refinement only)
+  | "signature"
+  | "pubkey"
+  | "usdc"
+  | "timestamp"
+  | "uuid"
+  | "url";
 
 interface JsonToken {
   kind: JsonTokenKind;
@@ -30,7 +37,81 @@ const KIND_TO_CLASS: Record<Exclude<JsonTokenKind, "whitespace">, string> = {
   number: "text-syntax-number",
   bool: "text-syntax-bool",
   null: "text-syntax-null",
+  signature: "text-syntax-signature font-medium",
+  pubkey: "text-syntax-pubkey",
+  usdc: "text-syntax-usdc font-medium",
+  timestamp: "text-syntax-timestamp",
+  uuid: "text-syntax-uuid",
+  url: "text-syntax-url underline decoration-dotted underline-offset-2",
 };
+
+/* ---------------------------------------------------------------------------
+ * Domain refinement
+ *
+ * Post-processes the raw token list, upgrading `string`/`number` tokens to
+ * one of six domain-aware kinds (signature, pubkey, usdc, timestamp, uuid,
+ * url) based on content shape + (for usdc) the most recent JSON key context.
+ * ------------------------------------------------------------------------- */
+
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+const URL_RE = /^https?:\/\//;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+const USDC_KEY_RE = /usdc|usd|amount|balance|price|cap|spent|value|cost/i;
+const USDC_NUM_RE = /^-?\d+(\.\d+)?$/;
+const USDC_STR_RE = /^\d+\.\d{1,8}$/;
+
+function detectDomain(
+  rawText: string,
+  fallback: "string" | "number",
+  recentKey: string | null,
+): JsonTokenKind {
+  const inner = fallback === "string" ? rawText.slice(1, -1) : rawText;
+
+  if (fallback === "string") {
+    if (URL_RE.test(inner)) return "url";
+    if (UUID_RE.test(inner)) return "uuid";
+    if (RFC3339_RE.test(inner)) return "timestamp";
+    if (BASE58_RE.test(inner)) {
+      if (inner.length >= 86 && inner.length <= 88) return "signature";
+      if (inner.length >= 32 && inner.length <= 44) return "pubkey";
+    }
+  }
+
+  if (recentKey && USDC_KEY_RE.test(recentKey)) {
+    if (fallback === "number" && USDC_NUM_RE.test(rawText)) return "usdc";
+    if (fallback === "string" && USDC_STR_RE.test(inner)) return "usdc";
+  }
+
+  return fallback;
+}
+
+function refineTokens(raw: JsonToken[]): JsonToken[] {
+  let recentKey: string | null = null;
+  const refined: JsonToken[] = [];
+  for (const tok of raw) {
+    if (tok.kind === "key") {
+      recentKey = tok.text.replace(/^"|"$/g, "");
+      refined.push(tok);
+      continue;
+    }
+    if (tok.kind === "string" || tok.kind === "number") {
+      const refinedKind = detectDomain(tok.text, tok.kind, recentKey);
+      refined.push({ kind: refinedKind, text: tok.text });
+      recentKey = null;
+      continue;
+    }
+    if (
+      tok.kind === "punct" &&
+      (tok.text === "," || tok.text === "}" || tok.text === "]")
+    ) {
+      recentKey = null;
+    }
+    refined.push(tok);
+  }
+  return refined;
+}
 
 class JsonTokenizer {
   private pos = 0;
@@ -200,6 +281,7 @@ export function highlightJson(raw: string): ReactNode {
   } catch {
     return createElement(Fragment, null, raw);
   }
+  tokens = refineTokens(tokens);
   const children: ReactNode[] = tokens.map((tok, i) => {
     if (tok.kind === "whitespace") {
       return createElement(Fragment, { key: i }, tok.text);
