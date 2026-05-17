@@ -35,6 +35,17 @@ services:
       AGENTSPAY_PAID_ENDPOINT_URL: http://paid-endpoint:3001
       AGENTSPAY_DEVNET_WALLET_PATH: /data/devnet-wallet.json
       AGENTSPAY_DEVNET_LEDGER_PATH: /data/devnet-ledger.db
+      # The SSRF guard added in the security audit blocks loopback and
+      # RFC1918 hosts by default. Inside this Docker network the shim
+      # legitimately needs to reach `http://paid-endpoint:3001`, which is a
+      # private DNS name resolving to a private IP. Opt-out is required
+      # for the demo provider call to succeed. This env var is inherited
+      # by the agentspay-mcp subprocess that the shim spawns.
+      AGENTSPAY_ALLOW_PRIVATE_HOSTS: "1"
+      # Set AGENTSPAY_ALLOWED_ORIGINS in production (e.g. https://agentspay.dev)
+      # to enable the Origin guard on mutating endpoints. Leaving it unset is
+      # fine for local dev; the shim will log a WARN at startup.
+      # AGENTSPAY_ALLOWED_ORIGINS: "https://agentspay.dev"
       # Force ANSI escapes on the spawned agentspay-mcp's stderr.
       # `docker compose logs` renders them fine, but stderr is not a TTY,
       # so the default isatty() check would strip color. FORCE_COLOR is
