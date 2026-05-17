@@ -71,7 +71,7 @@ export default function OpenGraphImage() {
             maxWidth: "1000px",
           }}
         >
-          Budget-controlled USDC for AI agents.
+          A USDC wallet your agent cannot drain.
         </div>
         <div
           style={{
@@ -81,8 +81,8 @@ export default function OpenGraphImage() {
             maxWidth: "900px",
           }}
         >
-          One MCP install. Real Solana settlement. Per-call and daily caps
-          enforced before the chain.
+          One MCP install. Per-call + daily caps before signing. Settles on
+          Solana in ~2 seconds. Open source MIT, security-audited.
         </div>
       </div>
 

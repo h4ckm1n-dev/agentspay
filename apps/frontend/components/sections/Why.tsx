@@ -1,11 +1,15 @@
 const CARDS = [
   {
-    title: "vs hardcoded API key",
-    body: "Caps + audit trail. Your agent literally cannot drain your OpenAI bill — pay_url refuses any call that would push the day's spend above your budget.",
+    title: "vs hardcoded keys",
+    body: "Your agent cannot drain your wallet. Per-call and daily caps are checked before pay_url signs anything. A hardcoded API key gives the agent the full credit card; AgentsPay gives it a wallet that says no.",
+  },
+  {
+    title: "vs writing it yourself",
+    body: "Skip the SPL-token plumbing, blockhash management, and ATA creation. Five typed tools, audit log baked in, attack surface closed against the obvious vectors (SSRF, decimals inflation, OOM bodies, malicious mint, CSRF).",
   },
   {
     title: "vs Stripe MPP",
-    body: "Self-custodial. Open source. Solana, not card rails. The whole stack runs on your laptop — no SaaS dependency, no merchant onboarding.",
+    body: "Self-custodial. Open source MIT. Solana, not card rails. The whole stack runs on your laptop with no SaaS dependency and no merchant onboarding.",
   },
   {
     title: "vs Coinbase CDP direct",
@@ -19,10 +23,13 @@ export function Why() {
       <p className="text-xs uppercase tracking-[0.12em] text-accent mb-4 font-mono">
         WHY
       </p>
-      <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-6">
+      <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">
         Built for indie devs in Claude Code, not enterprise procurement.
       </h2>
-      <div className="grid sm:grid-cols-3 gap-4">
+      <p className="mb-6 max-w-2xl text-sm text-fg-muted">
+        Audited surface. Typed errors. Real settlement. No middleman.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {CARDS.map((c) => (
           <div
             key={c.title}

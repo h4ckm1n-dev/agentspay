@@ -14,11 +14,11 @@ export const SITE = {
   url: resolveSiteUrl(),
   name: "AgentsPay",
   shortName: "agentspay",
-  tagline: "Budget-controlled USDC for AI agents",
+  tagline: "A USDC wallet your AI agent cannot drain",
   description:
-    "AgentsPay is a local MCP server that gives Claude Code, Cursor, Cline, and Zed agents a budget-controlled USDC wallet for x402-priced APIs. Per-call and daily caps are enforced before signing; every settlement is recorded in SQLite and verifiable on Solana.",
+    "AgentsPay is an open-source MCP server that gives Claude Code, Cursor, Cline, and Zed agents a USDC wallet they cannot drain. Per-call and daily caps are checked before signing. Settles on Solana in ~2 seconds. Security-audited (4 critical bugs caught and fixed) with 46 Rust + 10 TypeScript tests in CI. Also ships as @agentspay/sdk-js for Node and @agentspay/cli for shell.",
   shortDescription:
-    "An MCP server that gives your AI agent a budget-controlled USDC wallet for x402 APIs.",
+    "Open source MCP wallet your AI agent cannot drain. Per-call + daily caps, Solana settlement, security-audited.",
   twitter: "@agentspay",
   github: "https://github.com/h4ckm1n/agentspay",
   repoOwnerName: "h4ckm1n",
@@ -37,7 +37,12 @@ export const SITE = {
     "Claude Code",
     "Cursor",
     "Cline",
+    "Zed",
     "budget-controlled wallet",
+    "self-custodial",
+    "open source",
+    "security audited",
+    "agentspay",
   ],
 } as const;
 

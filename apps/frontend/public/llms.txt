@@ -1,8 +1,8 @@
 # AgentsPay
 
-> AgentsPay is a local MCP server that gives Claude Code, Cursor, Cline, and Zed agents a budget-controlled USDC wallet for x402-priced APIs. Per-call and daily caps are enforced before signing; every settlement is recorded in SQLite and verifiable on Solana.
+> AgentsPay is an open-source MCP server that gives AI agents (Claude Code, Cursor, Cline, Zed) a USDC wallet they cannot drain. Per-call and daily caps are checked before signing. Settles on Solana in ~2 seconds. Security-audited (4 critical bugs caught and fixed) with 46 Rust + 10 TypeScript tests covering the surface, including 13 adversarial tests for SSRF, decimals inflation, asset mismatch, body OOM, and origin spoofing.
 
-AgentsPay distributes as a single Rust binary (`agentspay-mcp`) that an MCP host installs locally. It speaks the Model Context Protocol over stdio and exposes five tools to the agent: `agentspay_balance`, `agentspay_pay_url`, `agentspay_set_budget`, `agentspay_audit_log`, `agentspay_topup_info`. The product status is v0.3 on Solana devnet; mainnet is gated behind a v0.5 compliance review.
+AgentsPay distributes as a single Rust binary (`agentspay-mcp`) that an MCP host installs locally. It speaks the Model Context Protocol over stdio and exposes five tools to the agent: `agentspay_balance`, `agentspay_pay_url`, `agentspay_set_budget`, `agentspay_audit_log`, `agentspay_topup_info`. Two npm packages wrap the same binary for non-MCP-host usage: `@agentspay/sdk-js` (TypeScript SDK for Node.js apps) and `@agentspay/cli` (the `agentspay` command-line tool). The product status is v0.3 on Solana devnet; mainnet is gated behind a v0.5 compliance review.
 
 The wedge: agent developers want their agent to autonomously pay for x402-priced APIs without handing it a credit card or an unrestricted keypair. AgentsPay enforces per-call and daily USDC spend caps *before* signing — the agent cannot drain the wallet. Every paid call writes an audit row in SQLite.
 

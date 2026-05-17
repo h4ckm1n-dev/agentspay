@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LiveTxBadge } from "@/components/ui/LiveTxBadge";
+import { LiveReceiptTicker } from "@/components/proof/LiveReceiptDeck";
 
 export function Hero() {
   return (
@@ -21,9 +21,10 @@ export function Hero() {
             AgentsPay
           </h1>
           <p className="mt-5 max-w-2xl text-base text-fg-muted sm:text-lg">
-            A budget-controlled USDC wallet for autonomous AI agents. One MCP
-            install, real Solana settlement, and spend caps enforced before the
-            chain.
+            A USDC wallet your AI agent{" "}
+            <span className="text-fg">cannot drain</span>. Per-call and daily
+            caps are checked before signing. Settles on Solana in ~2 seconds.
+            Drops into Claude Code, Cursor, Cline, or Zed.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -39,8 +40,29 @@ export function Hero() {
               Run the demo
             </Link>
           </div>
-          <div className="mt-10">
-            <LiveTxBadge />
+          <p className="mt-3 text-xs text-fg-muted">
+            Not in Claude Code? Use{" "}
+            <code className="font-mono text-fg">@agentspay/sdk-js</code> from
+            Node, or <code className="font-mono text-fg">@agentspay/cli</code>{" "}
+            from a shell. Same binary, same five tools.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs text-fg-muted">
+            <span>open source · MIT</span>
+            <span className="text-fg-faint">·</span>
+            <span>46 Rust + 10 TS tests</span>
+            <span className="text-fg-faint">·</span>
+            <span>
+              security audit (4 CRIT fixed){" "}
+              <Link
+                href="https://github.com/h4ckm1n/agentspay/blob/main/SECURITY-AUDIT.md"
+                className="text-accent underline-offset-4 hover:underline"
+              >
+                report
+              </Link>
+            </span>
+          </div>
+          <div className="mt-8">
+            <LiveReceiptTicker />
           </div>
         </div>
 
@@ -70,7 +92,7 @@ export function Hero() {
               </span>
             </p>
             <p className="text-accent">
-              paid 0.10 USDC - Solscan receipt confirmed
+              paid 0.10 USDC - receipt written to proof ledger
             </p>
           </div>
         </div>
