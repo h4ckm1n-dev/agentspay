@@ -497,6 +497,24 @@ agentspay topup-info
               X402SettlementError, ...) let you handle each failure mode
               discretely.
             </Callout>
+            <p className="mt-4 text-sm text-fg-muted">
+              Full package documentation:{" "}
+              <a
+                href="https://github.com/h4ckm1n/agentspay/blob/main/packages/sdk-js/README.md"
+                className="text-accent underline-offset-4 hover:underline"
+              >
+                @agentspay/sdk-js README
+              </a>{" "}
+              ·{" "}
+              <a
+                href="https://github.com/h4ckm1n/agentspay/blob/main/packages/cli/README.md"
+                className="text-accent underline-offset-4 hover:underline"
+              >
+                @agentspay/cli README
+              </a>
+              . Both ship the same five tools with typed errors and pretty +
+              JSON output.
+            </p>
           </DocSection>
 
           <DocSection id="tools" eyebrow="06" title="Tool Reference">
@@ -662,7 +680,12 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
               >
                 SECURITY-AUDIT.md
               </a>
-              . Highlights below.
+              . The regression suite runs on every push:{" "}
+              <code className="font-mono text-fg">46 Rust tests</code> (7 SSRF,
+              6 adversarial x402, 3 origin-guard, plus the rest of the
+              workspace) and{" "}
+              <code className="font-mono text-fg">10 TypeScript tests</code>{" "}
+              covering the SDK error classifier. Highlights below.
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               <Fact
