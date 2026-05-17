@@ -39,7 +39,7 @@ Then open <http://localhost:3000>.
 - check wallet status: `curl https://$DOMAIN/api/devnet/wallet-status`
 - restart shim only: `docker compose restart shim`
 - backup wallet: `./scripts/backup-wallet.sh`
-- view recent settled txs: any visitor's "Trigger" call updates `/api/stats/latest-tx` cache (in-memory, lost on shim restart).
+- view recent settled txs: any visitor's "Trigger" call updates `/api/stats/latest-tx` cache (persisted to SQLite at `AGENTSPAY_DEVNET_LEDGER_PATH`, survives shim restart).
 
 ## Build expectations
 

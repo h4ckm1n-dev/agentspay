@@ -105,7 +105,7 @@ The agent **cannot drain your wallet** because:
 - Browser-side **Origin guard** on mutating endpoints when `AGENTSPAY_ALLOWED_ORIGINS` is set — required for production deployments.
 - Containers run as **non-root** (uid 10001 for Rust services, uid 1000 / `node` for the Next.js image).
 
-The full audit, including known-accepted risks and the adversarial test suite, lives in [SECURITY-AUDIT.md](SECURITY-AUDIT.md). Run the regression suite with `cargo test --workspace` (43 Rust tests + 10 TypeScript tests cover every fix above).
+The full audit, including known-accepted risks and the adversarial test suite, lives in [SECURITY-AUDIT.md](SECURITY-AUDIT.md). Run the regression suite with `cargo test --workspace` (46 Rust tests) plus `pnpm --filter @agentspay/sdk-js test` (10 TypeScript tests).
 
 ## What's True Today
 
@@ -137,11 +137,12 @@ Useful entry points:
 | `services/web-shim/` | HTTP bridge for the website demo. |
 | `examples/paid-endpoint/` | Demo x402 provider (receive side). |
 | `apps/frontend/` | Next.js landing page, docs, proof, and demo UI. |
-| `packages/sdk-js/` | TypeScript SDK that spawns the MCP binary. |
-| `packages/cli/` | `agentspay` command-line tool. |
-| `docker/` | Website deployment stack and operator runbook. |
-| `Plan.md` | Active v3 execution plan (+ §15 v3.1 amendment). |
-| `SECURITY-AUDIT.md` | Threat model, findings, accepted risks. |
+| [`packages/sdk-js/`](packages/sdk-js/README.md) | TypeScript SDK that spawns the MCP binary. |
+| [`packages/cli/`](packages/cli/README.md) | `agentspay` command-line tool. |
+| [`docker/`](docker/README.md) | Website deployment stack and operator runbook. |
+| [`Plan.md`](Plan.md) | Active v3 execution plan (+ §15 v3.1 amendment). |
+| [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md) | Threat model, findings, accepted risks. |
+| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | Development guide for AI agents working on this repo. |
 
 ## License
 
