@@ -1,10 +1,26 @@
+<div align="center">
+
+<img src="apps/frontend/public/agentspay-mark.svg" alt="AgentsPay" width="96" />
+
 # AgentsPay
 
-Budget-controlled USDC for autonomous AI agents.
+**A USDC wallet your AI agent cannot drain.**
 
-AgentsPay is a local MCP server that lets Claude Code, Cursor, Cline, or Zed pay x402-priced APIs without handing the agent a credit card or an unrestricted keypair. It enforces per-call and daily caps before signing, records every attempt in SQLite, and can settle real USDC on Solana devnet.
+A local MCP server that gives Claude Code, Cursor, Cline, and Zed agents a budget-controlled USDC wallet for x402-priced APIs. Per-call and daily caps are checked before signing. Settles on Solana in ~2 seconds.
 
-Status: v0.3, devnet. Mainnet is intentionally gated behind a later compliance review.
+[Website](https://agentspay.dev) · [Docs](https://agentspay.dev/docs) · [Live proof](https://agentspay.dev/proof) · [Security audit](SECURITY-AUDIT.md)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-46_Rust_%2B_10_TS-blue.svg)](#development)
+[![Network](https://img.shields.io/badge/network-Solana_devnet-9945ff.svg)](https://solscan.io/?cluster=devnet)
+[![Security](https://img.shields.io/badge/security-audited_4_CRIT_fixed-success.svg)](SECURITY-AUDIT.md)
+[![Status](https://img.shields.io/badge/status-v0.3_devnet-yellow.svg)](Plan.md)
+
+</div>
+
+---
+
+Status: **v0.3, Solana devnet.** Mainnet is intentionally gated behind a v0.5 compliance review.
 
 ## Proof
 
@@ -21,7 +37,7 @@ The website proof page shows these permanent records plus the latest browser-tri
 ## Install
 
 ```bash
-git clone https://github.com/h4ckm1n/agentspay
+git clone https://github.com/h4ckm1n-dev/agentspay
 cd agentspay
 cargo build --release -p agentspay-mcp
 claude mcp add agentspay "$PWD/target/release/agentspay-mcp"

@@ -20,7 +20,7 @@ export const SITE = {
   shortDescription:
     "Open source MCP wallet your AI agent cannot drain. Per-call + daily caps, Solana settlement, security-audited.",
   twitter: "@agentspay",
-  github: "https://github.com/h4ckm1n/agentspay",
+  github: "https://github.com/h4ckm1n-dev/agentspay",
   repoOwnerName: "h4ckm1n",
   themeColor: "#0a0a0b",
   locale: "en_US",

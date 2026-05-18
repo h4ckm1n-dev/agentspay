@@ -13,7 +13,7 @@
   "homepage": "https://agentspay.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/h4ckm1n/agentspay.git",
+    "url": "https://github.com/h4ckm1n-dev/agentspay.git",
     "directory": "packages/cli"
   },
   "license": "MIT",

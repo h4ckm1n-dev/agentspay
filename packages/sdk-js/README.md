@@ -103,7 +103,7 @@ new AgentsPayClient({
 
 - Node.js 18+. One subprocess per tool call; cold-start cost ~100–150ms. For `pay_url` on devnet, total latency is dominated by the on-chain settlement (~1–2s), so the spawn cost is invisible.
 - The SDK does not implement payment retries or the x402 protocol itself — that all lives in the `agentspay-mcp` binary. The SDK is a thin typed wrapper.
-- Browser support: **not yet**. The transport requires `node:child_process`. For browser-side usage, run the [web-shim](https://github.com/h4ckm1n/agentspay/tree/main/services/web-shim) and call it via HTTP.
+- Browser support: **not yet**. The transport requires `node:child_process`. For browser-side usage, run the [web-shim](https://github.com/h4ckm1n-dev/agentspay/tree/main/services/web-shim) and call it via HTTP.
 
 ## License
 

@@ -95,7 +95,7 @@ export default function OpenGraphImage() {
           color: "#737378",
         }}
       >
-        <span>github.com/h4ckm1n/agentspay</span>
+        <span>github.com/h4ckm1n-dev/agentspay</span>
         <span style={{ color: "#34d399" }}>agentspay.dev</span>
       </div>
     </div>,
