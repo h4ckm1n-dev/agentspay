@@ -1,0 +1,103 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude PR Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          # AgentsPay uses the API-key path. To use the Claude Code subscription
+          # instead (cheaper for frequent reviewers), swap this for:
+          #   claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Token is generated via `claude setup-token` and stored as a repo secret.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are reviewing a pull request on AgentsPay, an open-source
+            MCP server that gives AI agents a budget-controlled USDC wallet
+            for x402-priced APIs on Solana.
+
+            Read `CLAUDE.md` first to ground yourself in the project's
+            mandates, structure, and coding standards. Read `SECURITY-AUDIT.md`
+            for the threat model and accepted risks.
+
+            Then review this PR with the AgentsPay-specific lens below.
+            Only post comments on real, actionable issues. Do not pad with
+            generic praise or low-confidence speculation.
+
+            ## Security checklist (highest priority)
+
+            Anything that touches `services/mcp/src/x402.rs`,
+            `services/mcp/src/solana.rs`, `services/mcp/src/wallet.rs`, or
+            the `agentspay_pay_url` handler in `main.rs` must keep these
+            invariants:
+            - Per-call cap + daily cap are checked BEFORE signing.
+            - `requirement.asset == USDC_MINT_DEVNET` enforced for real-signing modes.
+            - `requirement.extra.decimals == 6` enforced (no inflation).
+            - HTTP response bodies pass through `read_body_bounded` (1 MiB cap).
+            - URLs go through `validate_url_host_for_ssrf` unless explicitly
+              opted out via `AGENTSPAY_ALLOW_PRIVATE_HOSTS`.
+            - Keypair file is mode 0600 on Unix, never logged.
+            - SeaORM transactions wrap any ledger write that pairs with a
+              settle (don't split audit + ledger writes across separate txns).
+
+            Anything that touches `services/web-shim/src/handlers/` must
+            keep these invariants:
+            - Rate limits key on `super::client_ip(&headers, &addr)`, not on
+              the direct `ConnectInfo<SocketAddr>` peer.
+            - Mutating endpoints pass through the `origin_guard` middleware.
+            - Subprocess spawns use the existing `subprocess::run` helper,
+              not raw `Command::spawn`.
+
+            ## Code quality checklist
+
+            - Rust: no `unwrap()` in handlers; typed errors via `thiserror`;
+              `tracing::warn!`/`tracing::info!` for noteworthy events; no
+              dead-code warnings (CI fails on `-D warnings`).
+            - TypeScript: strict + `exactOptionalPropertyTypes`; no `any`;
+              SDK response shapes stay wire-faithful (snake_case mirroring
+              the Rust source).
+            - Tests: any new SDK error class needs a unit test in
+              `errors.test.ts`; any new MCP tool needs at least one
+              adversarial test in `x402.rs::tests` if it touches signing.
+
+            ## What to flag explicitly
+
+            - Any new outbound HTTP call: does the host get validated?
+            - Any new env var: is it documented in CLAUDE.md and the
+              `/docs` env table?
+            - Any new `console.log` or `println!` in production code paths
+              (the MCP server's stdout is reserved for JSON-RPC framing).
+            - Any change to `Plan.md` non-goals or `SECURITY-AUDIT.md`
+              accepted risks — these are deliberate; flag scope creep.
+
+            ## Tone
+
+            Be concrete: name files, line numbers, and the specific
+            invariant violated. If a comment block has more than 3 issues,
+            consolidate. Skip nits unless they're security-relevant.
+
+            If the PR is clean, post a single approving comment naming the
+            best part of it. Do not pad.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

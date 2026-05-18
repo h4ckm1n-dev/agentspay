@@ -2,6 +2,15 @@
 //!
 //! Foreign key is logical only (we point at `wallet.agent_id`); SQLite
 //! FKs are deferred to v0.2 once we have a real policy DSL.
+//!
+//! The struct + enum are part of the SeaORM scaffolding so the
+//! `m20260513_000003_policy` migration round-trips, but no v0.3 code
+//! path constructs them yet. Real wiring lands when we add the
+//! `agentspay_set_policy` tool. `#[allow(dead_code)]` is the SeaORM
+//! convention for entity stubs whose schema is shipped ahead of the
+//! Rust call sites.
+
+#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
