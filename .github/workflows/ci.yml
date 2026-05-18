@@ -47,8 +47,10 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # No explicit version — the action reads `packageManager` from
+        # package.json (currently pnpm@9.15.0). Specifying both causes
+        # ERR_PNPM_BAD_PM_VERSION.
+
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
