@@ -89,12 +89,39 @@ export interface DevnetTriggerResponse {
   latency_ms: number;
 }
 
+export interface DevnetPaymentRequestResponse {
+  symbol: string;
+  url: string;
+  status: number;
+  amount_usdc: string | null;
+  pay_to: string | null;
+  network: string | null;
+  description: string | null;
+  resource: string | null;
+  body: unknown;
+}
+
 export async function fetchWalletStatus(): Promise<DevnetWalletStatus> {
   return http<DevnetWalletStatus>("/api/devnet/wallet-status", {
     method: "GET",
   });
 }
 
-export async function triggerDevnet(): Promise<DevnetTriggerResponse> {
-  return http<DevnetTriggerResponse>("/api/devnet/trigger", { method: "POST" });
+export async function requestDevnetPayment(
+  symbol: string,
+): Promise<DevnetPaymentRequestResponse> {
+  const params = new URLSearchParams({ symbol });
+  return http<DevnetPaymentRequestResponse>(
+    `/api/devnet/payment-request?${params.toString()}`,
+    { method: "GET" },
+  );
+}
+
+export async function triggerDevnet(
+  symbol?: string,
+): Promise<DevnetTriggerResponse> {
+  return http<DevnetTriggerResponse>("/api/devnet/trigger", {
+    method: "POST",
+    body: JSON.stringify(symbol ? { symbol } : {}),
+  });
 }

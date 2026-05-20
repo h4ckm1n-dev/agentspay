@@ -302,12 +302,10 @@ export default function DocsPage() {
         path="/docs"
         sections={TOC.map(([, label]) => label)}
       />
-      <section className="border-b border-border-subtle px-6 py-12">
-        <div className="mx-auto max-w-6xl">
-          <p className="mb-3 font-mono text-xs uppercase tracking-[0.12em] text-accent">
-            DEVELOPER DOCS
-          </p>
-          <h1 className="max-w-4xl text-3xl font-semibold tracking-tight sm:text-5xl">
+      <section className="page-hero">
+        <div className="mx-auto max-w-7xl">
+          <div className="section-kicker">Developer docs</div>
+          <h1 className="max-w-4xl text-4xl font-semibold leading-tight sm:text-6xl">
             Build agents that can pay, with a wallet they cannot drain.
           </h1>
           <p className="mt-4 max-w-3xl text-sm leading-relaxed text-fg-muted sm:text-base">
@@ -319,14 +317,14 @@ export default function DocsPage() {
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-10 lg:grid-cols-[230px_1fr]">
+      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-10 sm:px-6 lg:grid-cols-[260px_1fr] lg:px-8">
         <aside className="hidden lg:block">
-          <nav className="sticky top-24 space-y-2 font-mono text-xs">
+          <nav className="sticky top-24 space-y-1 rounded-lg border border-border bg-black/30 p-3 font-mono text-xs">
             {TOC.map(([href, label]) => (
               <a
                 key={href}
                 href={`#${href}`}
-                className="block text-fg-muted transition hover:text-fg"
+                className="block rounded px-2 py-1.5 text-fg-muted transition hover:bg-bg-elev hover:text-fg"
               >
                 {label}
               </a>
@@ -369,7 +367,7 @@ export default function DocsPage() {
               an absolute path once you move beyond a local checkout.
             </p>
             <div className="mt-5 space-y-3">
-              <CodeBlock value="git clone https://github.com/h4ckm1n/agentspay && cd agentspay" />
+              <CodeBlock value="git clone https://github.com/h4ckm1n-dev/agentspay && cd agentspay" />
               <CodeBlock value="cargo build --release -p agentspay-mcp" />
               <CodeBlock value="claude mcp add agentspay $PWD/target/release/agentspay-mcp" />
             </div>
@@ -500,14 +498,14 @@ agentspay topup-info
             <p className="mt-4 text-sm text-fg-muted">
               Full package documentation:{" "}
               <a
-                href="https://github.com/h4ckm1n/agentspay/blob/main/packages/sdk-js/README.md"
+                href="https://github.com/h4ckm1n-dev/agentspay/blob/main/packages/sdk-js/README.md"
                 className="text-accent underline-offset-4 hover:underline"
               >
                 @agentspay/sdk-js README
               </a>{" "}
               ·{" "}
               <a
-                href="https://github.com/h4ckm1n/agentspay/blob/main/packages/cli/README.md"
+                href="https://github.com/h4ckm1n-dev/agentspay/blob/main/packages/cli/README.md"
                 className="text-accent underline-offset-4 hover:underline"
               >
                 @agentspay/cli README
@@ -675,7 +673,7 @@ AGENTSPAY_DATABASE_URL=sqlite:///tmp/agentspay-sandbox.db?mode=rwc \\
               full threat model, every finding, and the adversarial test suite
               live in{" "}
               <a
-                href="https://github.com/h4ckm1n/agentspay/blob/main/SECURITY-AUDIT.md"
+                href="https://github.com/h4ckm1n-dev/agentspay/blob/main/SECURITY-AUDIT.md"
                 className="text-accent underline-offset-4 hover:underline"
               >
                 SECURITY-AUDIT.md
@@ -785,9 +783,11 @@ function DocSection({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-24">
+    <section id={id} className="scroll-mt-24 border-t border-border-subtle pt-10 first:border-t-0 first:pt-0">
       <p className="mb-2 font-mono text-xs text-accent">{eyebrow}</p>
-      <h2 className="mb-4 text-2xl font-semibold tracking-tight">{title}</h2>
+      <h2 className="mb-4 text-2xl font-semibold text-fg sm:text-3xl">
+        {title}
+      </h2>
       <div className="space-y-5 text-sm leading-relaxed text-fg-muted">
         {children}
       </div>
@@ -797,7 +797,7 @@ function DocSection({
 
 function ToolCard({ tool }: { tool: (typeof TOOL_REFERENCE)[number] }) {
   return (
-    <article className="rounded-md border border-border p-4">
+    <article className="tool-panel p-4 sm:p-5">
       <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row">
         <div>
           <h3 className="font-mono text-sm text-fg">{tool.name}</h3>
@@ -807,11 +807,9 @@ function ToolCard({ tool }: { tool: (typeof TOOL_REFERENCE)[number] }) {
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
         <div>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg">
-            Args
-          </h4>
+          <h4 className="mb-2 text-xs font-semibold uppercase text-fg">Args</h4>
           <CodePanel title="" code={tool.args} compact />
-          <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-[0.08em] text-fg">
+          <h4 className="mb-2 mt-4 text-xs font-semibold uppercase text-fg">
             Returns
           </h4>
           <ul className="space-y-1 text-xs">
@@ -828,7 +826,7 @@ function ToolCard({ tool }: { tool: (typeof TOOL_REFERENCE)[number] }) {
 
 function Fact({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-md border border-border bg-bg-elev p-4">
+    <div className="quiet-panel p-4">
       <h3 className="mb-2 text-sm font-semibold text-fg">{title}</h3>
       <p className="text-xs leading-relaxed text-fg-muted">{body}</p>
     </div>
@@ -843,7 +841,7 @@ function Callout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-accent/30 bg-accent/5 p-4">
+    <div className="rounded-lg border border-accent/30 bg-accent/10 p-4">
       <h3 className="mb-2 text-sm font-semibold text-fg">{title}</h3>
       <p className="text-xs leading-relaxed text-fg-muted">{children}</p>
     </div>
@@ -855,7 +853,7 @@ function StepList({ items }: { items: readonly string[] }) {
     <ol className="space-y-3">
       {items.map((item, index) => (
         <li key={item} className="flex gap-3">
-          <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-bg-elev font-mono text-xs text-accent">
+          <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border border-accent/20 bg-accent/10 font-mono text-xs text-accent">
             {index + 1}
           </span>
           <span>{item}</span>
@@ -868,7 +866,7 @@ function StepList({ items }: { items: readonly string[] }) {
 function Flow({ children }: { children: React.ReactNode }) {
   const items = React.Children.toArray(children);
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-bg-deep p-3 font-mono text-xs">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-bg-deep p-3 font-mono text-xs">
       {items.map((item, index) => (
         <div key={index} className="flex items-center gap-2">
           <span className="rounded bg-bg-elev px-2.5 py-1.5 text-fg">
@@ -895,7 +893,7 @@ function CodePanel({
   compact?: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-bg-deep">
+    <div className="overflow-hidden rounded-lg border border-border bg-bg-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       {title.length > 0 && (
         <div className="border-b border-border-subtle bg-bg-elev px-3 py-2 font-mono text-xs text-fg-muted">
           {title}
@@ -914,7 +912,7 @@ function CodePanel({
 
 function Host({ title, code }: { title: string; code: string }) {
   return (
-    <div className="rounded-md border border-border bg-bg-elev p-4">
+    <div className="quiet-panel p-4">
       <h3 className="mb-3 text-sm font-semibold text-fg">{title}</h3>
       <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-bg-deep p-3 font-mono text-xs leading-relaxed text-syntax-string">
         {code}
@@ -935,7 +933,7 @@ function LinkBox({
   return (
     <a
       href={href}
-      className="rounded-md border border-border bg-bg-elev p-4 transition hover:border-accent/50"
+      className="quiet-panel block p-4 transition hover:border-accent/50"
     >
       <h3 className="mb-2 text-sm font-semibold text-fg">{title}</h3>
       <p className="text-xs leading-relaxed text-fg-muted">{body}</p>
@@ -954,7 +952,7 @@ function Trouble({
   fix: string;
 }) {
   return (
-    <div className="rounded-md border border-border p-4">
+    <div className="quiet-panel p-4">
       <h3 className="mb-2 text-sm font-semibold text-fg">{symptom}</h3>
       <p className="text-xs leading-relaxed text-fg-muted">
         <span className="text-fg">Cause:</span> {cause}

@@ -1,41 +1,93 @@
-const CARDS = [
+import {
+  Binary,
+  Braces,
+  FileClock,
+  LockKeyhole,
+  Route,
+} from "lucide-react";
+
+const STEPS = [
   {
-    n: "1",
-    title: "MCP host calls a tool",
-    body: "Claude Code, Cursor, or Cline invokes one of the 5 tools over MCP stdio JSON-RPC. Your agent talks to the local binary, never to a hosted service it doesn't control.",
+    title: "Host invokes MCP",
+    body: "Claude Code, Cursor, Cline, or Zed calls one of five stdio JSON-RPC tools. The agent talks to the local binary, not a hosted wallet API.",
+    icon: Binary,
   },
   {
-    n: "2",
-    title: "Budget check before signature",
-    body: "Per-call cap and rolling-daily cap are enforced before any keypair touches the transaction. A tokio Mutex serializes the critical section so two parallel calls can't both pass against a stale view.",
+    title: "Policy blocks bad spend",
+    body: "max_amount_usdc, per-call cap, daily cap, SSRF, asset mint, and decimals are checked before a Solana transaction exists.",
+    icon: LockKeyhole,
   },
   {
-    n: "3",
-    title: "On-chain settlement",
-    body: "SPL transfer_checked signed locally, base64-encoded, sent in the X-Payment header, settled by the upstream x402 server through Solana devnet RPC. The signature comes back in X-Payment-Response.",
+    title: "x402 gets retried with proof",
+    body: "AgentsPay probes the URL, parses the 402 requirements, signs a devnet USDC transfer, and retries with X-Payment.",
+    icon: Route,
   },
-];
+  {
+    title: "Ledger records the outcome",
+    body: "Paid, rejected, and no-payment calls are written into SQLite so the SDK, CLI, MCP host, and proof page all see the same truth.",
+    icon: FileClock,
+  },
+] as const;
+
+const CONTRACT = [
+  "snake_case response shapes",
+  "one subprocess per call",
+  "SeaORM ledger writes",
+  "typed SDK errors",
+] as const;
 
 export function HowItWorks() {
   return (
-    <section className="px-6 py-16 max-w-3xl mx-auto border-t border-border-subtle">
-      <p className="text-xs uppercase tracking-[0.12em] text-accent mb-4 font-mono">
-        §4 · HOW IT WORKS
-      </p>
-      <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-6">
-        Three steps between a tool call and an on-chain receipt.
-      </h2>
-      <div className="grid sm:grid-cols-3 gap-4">
-        {CARDS.map((c) => (
-          <div
-            key={c.n}
-            className="bg-bg-elev border border-border rounded-md p-4"
-          >
-            <div className="text-xs font-mono text-accent mb-2">{c.n}</div>
-            <h3 className="font-semibold text-fg text-sm mb-2">{c.title}</h3>
-            <p className="text-fg-muted text-xs leading-relaxed">{c.body}</p>
+    <section className="section-shell py-16 sm:py-20">
+      <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+        <div>
+          <div className="section-kicker">
+            <Braces className="h-3.5 w-3.5 text-accent" aria-hidden />
+            Runtime contract
           </div>
-        ))}
+          <h2 className="max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
+            Small payment path, strict enough for autonomous agents.
+          </h2>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-fg-muted sm:text-base">
+            The implementation is deliberately narrow: a local signer, a budget
+            policy, x402 settlement, and receipts a developer can audit from the
+            source or the browser.
+          </p>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            {CONTRACT.map((item) => (
+              <div key={item} className="code-chip">
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {STEPS.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <article
+                key={step.title}
+                className="quiet-panel min-h-[210px] p-5 transition hover:border-accent/40 hover:bg-bg-panel/70"
+              >
+                <div className="mb-5 flex items-center justify-between">
+                  <span className="grid h-10 w-10 place-items-center rounded-md border border-border bg-bg-deep text-accent">
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="font-mono text-xs text-fg-faint">
+                    0{index + 1}
+                  </span>
+                </div>
+                <h3 className="text-base font-semibold text-fg">
+                  {step.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-fg-muted">
+                  {step.body}
+                </p>
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

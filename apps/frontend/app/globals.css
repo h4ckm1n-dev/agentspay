@@ -6,24 +6,154 @@
   color-scheme: dark;
 }
 
-html, body {
-  background: #0a0a0b;
+html,
+body {
+  min-height: 100%;
+  background: #070708;
   color: #fafafa;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* { box-sizing: border-box; }
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  position: relative;
+  overflow-x: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(7, 7, 8, 0.98) 0%,
+      rgba(13, 13, 15, 0.98) 44%,
+      #070708 100%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(20, 184, 166, 0.12),
+      transparent 32%,
+      rgba(59, 130, 246, 0.1) 64%,
+      transparent
+    );
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background-image:
+    linear-gradient(rgba(250, 250, 250, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 250, 250, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.68), transparent 74%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.85);
+  outline-offset: 3px;
+}
 
 ::selection {
-  background: rgba(16,185,129,0.25);
+  background: rgba(16, 185, 129, 0.25);
   color: #fafafa;
 }
 
 @keyframes accent-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
-  70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
-  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
-.animate-accent-pulse { animation: accent-pulse 1s ease-out; }
+.animate-accent-pulse {
+  animation: accent-pulse 1s ease-out;
+}
+
+@layer components {
+  .section-shell {
+    @apply mx-auto w-full max-w-7xl px-5 sm:px-6 lg:px-8;
+  }
+
+  .page-band {
+    @apply border-b border-border-subtle;
+    background:
+      linear-gradient(120deg, rgba(20, 184, 166, 0.14), transparent 34%),
+      linear-gradient(320deg, rgba(96, 165, 250, 0.12), transparent 36%),
+      rgba(12, 12, 14, 0.84);
+  }
+
+  .page-hero {
+    @apply border-b border-border-subtle px-5 py-12 sm:px-6 sm:py-16 lg:px-8;
+    background:
+      linear-gradient(180deg, rgba(16, 16, 18, 0.88), rgba(7, 7, 8, 0.9)),
+      repeating-linear-gradient(
+        90deg,
+        rgba(250, 250, 250, 0.035) 0,
+        rgba(250, 250, 250, 0.035) 1px,
+        transparent 1px,
+        transparent 72px
+      );
+  }
+
+  .eyebrow {
+    @apply font-mono text-xs font-medium uppercase tracking-normal text-accent;
+  }
+
+  .surface-panel {
+    @apply rounded-lg border border-border bg-bg-panel/80 shadow-[0_24px_90px_rgba(0,0,0,0.34)] backdrop-blur;
+  }
+
+  .tool-panel {
+    @apply rounded-lg border border-border bg-black/40 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur;
+  }
+
+  .quiet-panel {
+    @apply rounded-lg border border-border-subtle bg-bg-panel/50;
+  }
+
+  .button-primary {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-fg px-4 py-2.5 text-sm font-semibold text-bg transition hover:bg-white/90;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-border bg-bg-panel/70 px-4 py-2.5 text-sm font-medium text-fg transition hover:border-accent/50 hover:bg-bg-raised/70;
+  }
+
+  .icon-button {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-md border border-border bg-bg-panel/70 text-fg-muted transition hover:border-accent/50 hover:text-fg;
+  }
+
+  .metric-pill {
+    @apply inline-flex min-h-14 items-center gap-3 rounded-lg border border-border bg-black/40 px-3 py-2 font-mono text-xs text-fg-muted;
+  }
+
+  .section-kicker {
+    @apply mb-3 inline-flex items-center gap-2 rounded-md border border-border bg-black/30 px-2.5 py-1.5 font-mono text-xs uppercase text-fg-muted;
+  }
+
+  .code-chip {
+    @apply rounded-md border border-border bg-bg-deep px-2 py-1 font-mono text-xs text-syntax-string;
+  }
+}
