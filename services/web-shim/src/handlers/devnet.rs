@@ -4,11 +4,11 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum::{
-    extract::{ConnectInfo, State},
-    http::HeaderMap,
+    extract::{ConnectInfo, Query, State},
+    http::{HeaderMap, StatusCode},
     Json,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
@@ -60,10 +60,16 @@ pub struct TriggerResponse {
     pub latency_ms: u128,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TriggerRequest {
+    pub symbol: Option<String>,
+}
+
 pub async fn trigger(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     State(state): State<AppState>,
+    payload: Option<Json<TriggerRequest>>,
 ) -> Result<Json<TriggerResponse>, ShimError> {
     let client_ip = super::client_ip(&headers, &addr);
     state
@@ -87,7 +93,8 @@ pub async fn trigger(
         return Err(ShimError::WalletDrained);
     }
 
-    let symbol = pick_symbol();
+    let requested = payload.as_ref().and_then(|Json(req)| req.symbol.as_deref());
+    let symbol = requested_symbol(requested)?;
     let url = format!("{}/real-quote/{}", state.config.paid_endpoint_url, symbol);
     let db_url = format!(
         "sqlite://{}?mode=rwc",
@@ -147,11 +154,134 @@ pub async fn trigger(
     Ok(Json(TriggerResponse {
         signature,
         explorer_url,
-        symbol: symbol.into(),
+        symbol,
         amount_charged_usdc,
         body,
         latency_ms,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PaymentRequestQuery {
+    pub symbol: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaymentRequestResponse {
+    pub symbol: String,
+    pub url: String,
+    pub status: u16,
+    pub amount_usdc: Option<String>,
+    pub pay_to: Option<String>,
+    pub network: Option<String>,
+    pub description: Option<String>,
+    pub resource: Option<String>,
+    pub body: Value,
+}
+
+pub async fn payment_request(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<PaymentRequestQuery>,
+) -> Result<Json<PaymentRequestResponse>, ShimError> {
+    let client_ip = super::client_ip(&headers, &addr);
+    state
+        .ratelimit
+        .check(
+            &format!("devnet-payment-request:{client_ip}"),
+            STATUS_RL_MAX,
+            STATUS_RL_WINDOW,
+        )
+        .await
+        .map_err(|retry_after_secs| ShimError::RateLimited { retry_after_secs })?;
+
+    let symbol = requested_symbol(query.symbol.as_deref())?;
+    let url = format!("{}/real-quote/{}", state.config.paid_endpoint_url, symbol);
+    let response = state
+        .http
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| ShimError::Internal(format!("request payment: {e}")))?;
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|e| ShimError::Internal(format!("read payment request: {e}")))?;
+
+    if status != StatusCode::PAYMENT_REQUIRED {
+        tracing::warn!(
+            status = status.as_u16(),
+            symbol,
+            "paid endpoint did not return a 402 payment request"
+        );
+    }
+
+    let requirement = body.pointer("/accepts/0").unwrap_or(&Value::Null);
+    let amount_usdc = requirement
+        .get("maxAmountRequired")
+        .and_then(Value::as_str)
+        .and_then(|amount| {
+            let decimals = requirement
+                .pointer("/extra/decimals")
+                .and_then(Value::as_u64)
+                .unwrap_or(6) as u32;
+            amount_to_usdc(amount, decimals)
+        });
+
+    Ok(Json(PaymentRequestResponse {
+        symbol,
+        url,
+        status: status.as_u16(),
+        amount_usdc,
+        pay_to: requirement
+            .get("payTo")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        network: requirement
+            .get("network")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        description: requirement
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        resource: requirement
+            .get("resource")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        body,
+    }))
+}
+
+fn requested_symbol(symbol: Option<&str>) -> Result<String, ShimError> {
+    let Some(symbol) = symbol else {
+        return Ok(pick_symbol().to_string());
+    };
+    let normalized = symbol.trim().to_uppercase();
+    if SYMBOLS.contains(&normalized.as_str()) {
+        return Ok(normalized);
+    }
+    Err(ShimError::BadRequest(format!(
+        "unsupported symbol {symbol}; expected one of {}",
+        SYMBOLS.join(", ")
+    )))
+}
+
+fn amount_to_usdc(amount: &str, decimals: u32) -> Option<String> {
+    let units = amount.parse::<u128>().ok()?;
+    let scale = 10_u128.checked_pow(decimals)?;
+    let whole = units / scale;
+    let fractional = units % scale;
+    if fractional == 0 {
+        return Some(whole.to_string());
+    }
+    let mut frac = format!("{fractional:0width$}", width = decimals as usize);
+    while frac.ends_with('0') {
+        frac.pop();
+    }
+    Some(format!("{whole}.{frac}"))
 }
 
 fn pick_symbol() -> &'static str {

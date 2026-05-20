@@ -31,6 +31,10 @@ impl NetworkMode {
             Self::SolanaDevnet => "solana-devnet",
         }
     }
+
+    fn allows_private_hosts(self) -> bool {
+        matches!(self, Self::SolanaDevnet)
+    }
 }
 
 pub struct McpCall<'a> {
@@ -57,6 +61,13 @@ pub async fn run(call: McpCall<'_>) -> Result<Value, ShimError> {
         // Native MCP-host installs already see this output — this brings
         // the Docker-stack experience in line.
         .stderr(Stdio::inherit());
+
+    if call.network.allows_private_hosts() {
+        // The devnet demo pays a controlled, symbol-only URL on the internal
+        // Docker network (`paid-endpoint`). Keep sandbox browser tool calls on
+        // the default SSRF guard because their args are user-provided.
+        cmd.env("AGENTSPAY_ALLOW_PRIVATE_HOSTS", "1");
+    }
 
     let mut child = cmd
         .spawn()
