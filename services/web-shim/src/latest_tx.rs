@@ -40,6 +40,20 @@ const UPSERT_SQL: &str = "INSERT INTO latest_tx_cache \
     explorer_url = excluded.explorer_url, \
     recorded_at = excluded.recorded_at";
 
+const COUNT_LEDGER_SQL: &str = "SELECT COUNT(*) AS total \
+    FROM ledger_entry \
+    WHERE transaction_id IS NOT NULL AND transaction_id != ''";
+
+const SELECT_LEDGER_SQL: &str = "SELECT agent_id, endpoint, amount_usdc, payment_id, \
+    transaction_id, status, created_at \
+    FROM ledger_entry \
+    WHERE transaction_id IS NOT NULL AND transaction_id != '' \
+    ORDER BY created_at DESC \
+    LIMIT ? OFFSET ?";
+
+pub const MAX_LEDGER_PAGES: u64 = 20;
+const MAX_PAGE_SIZE: u64 = 25;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct LatestTx {
     pub signature: String,
@@ -55,6 +69,30 @@ pub struct LatestTxView {
     pub amount_usdc: String,
     pub explorer_url: String,
     pub age_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LedgerTxView {
+    pub signature: String,
+    pub amount_usdc: String,
+    pub explorer_url: String,
+    pub endpoint: String,
+    pub symbol: String,
+    pub status: String,
+    pub agent_id: String,
+    pub payment_id: String,
+    pub created_at: String,
+    pub age_seconds: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LedgerTxPage {
+    pub page: u64,
+    pub page_size: u64,
+    pub total: u64,
+    pub total_pages: u64,
+    pub max_pages: u64,
+    pub transactions: Vec<LedgerTxView>,
 }
 
 #[derive(Default)]
@@ -154,6 +192,138 @@ impl LatestTxCache {
             age_seconds: age,
         })
     }
+
+    pub async fn ledger_transactions(
+        &self,
+        page: u64,
+        page_size: u64,
+    ) -> anyhow::Result<LedgerTxPage> {
+        let page = page.clamp(1, MAX_LEDGER_PAGES);
+        let page_size = page_size.clamp(1, MAX_PAGE_SIZE);
+        let Some(db) = self.db.as_ref() else {
+            return Ok(empty_ledger_page(page, page_size));
+        };
+
+        let total = match db
+            .query_one(Statement::from_string(
+                DbBackend::Sqlite,
+                COUNT_LEDGER_SQL.to_string(),
+            ))
+            .await
+        {
+            Ok(Some(row)) => {
+                let total: i64 = row.try_get("", "total")?;
+                total.max(0) as u64
+            }
+            Ok(None) => 0,
+            Err(err) if is_missing_ledger_table(&err) => 0,
+            Err(err) => return Err(err.into()),
+        };
+
+        if total == 0 {
+            return Ok(empty_ledger_page(page, page_size));
+        }
+
+        let total_pages = total.div_ceil(page_size).min(MAX_LEDGER_PAGES);
+        if page > total_pages {
+            return Ok(LedgerTxPage {
+                page,
+                page_size,
+                total,
+                total_pages,
+                max_pages: MAX_LEDGER_PAGES,
+                transactions: Vec::new(),
+            });
+        }
+
+        let offset = (page - 1) * page_size;
+        let rows = match db
+            .query_all(Statement::from_sql_and_values(
+                DbBackend::Sqlite,
+                SELECT_LEDGER_SQL,
+                [
+                    SeaValue::from(page_size as i64),
+                    SeaValue::from(offset as i64),
+                ],
+            ))
+            .await
+        {
+            Ok(rows) => rows,
+            Err(err) if is_missing_ledger_table(&err) => Vec::new(),
+            Err(err) => return Err(err.into()),
+        };
+
+        let transactions = rows
+            .into_iter()
+            .map(|row| {
+                let endpoint: String = row.try_get("", "endpoint")?;
+                let signature: String = row.try_get("", "transaction_id")?;
+                let created_at: String = row.try_get("", "created_at")?;
+                Ok(LedgerTxView {
+                    explorer_url: solscan_url(&signature),
+                    symbol: symbol_from_endpoint(&endpoint),
+                    signature,
+                    endpoint,
+                    amount_usdc: row.try_get("", "amount_usdc")?,
+                    payment_id: row.try_get("", "payment_id")?,
+                    status: row.try_get("", "status")?,
+                    agent_id: row.try_get("", "agent_id")?,
+                    age_seconds: age_seconds(&created_at),
+                    created_at,
+                })
+            })
+            .collect::<Result<Vec<_>, sea_orm::DbErr>>()?;
+
+        Ok(LedgerTxPage {
+            page,
+            page_size,
+            total,
+            total_pages,
+            max_pages: MAX_LEDGER_PAGES,
+            transactions,
+        })
+    }
+}
+
+fn empty_ledger_page(page: u64, page_size: u64) -> LedgerTxPage {
+    LedgerTxPage {
+        page,
+        page_size,
+        total: 0,
+        total_pages: 0,
+        max_pages: MAX_LEDGER_PAGES,
+        transactions: Vec::new(),
+    }
+}
+
+fn is_missing_ledger_table(err: &sea_orm::DbErr) -> bool {
+    err.to_string().contains("no such table: ledger_entry")
+}
+
+fn solscan_url(signature: &str) -> String {
+    format!("https://solscan.io/tx/{signature}?cluster=devnet")
+}
+
+fn symbol_from_endpoint(endpoint: &str) -> String {
+    endpoint
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|part| !part.is_empty())
+        .map(|part| part.chars().take(12).collect::<String>())
+        .unwrap_or_else(|| "PAY".to_string())
+}
+
+fn age_seconds(created_at: &str) -> Option<u64> {
+    DateTime::parse_from_rfc3339(created_at)
+        .ok()
+        .and_then(|dt| {
+            Utc::now()
+                .signed_duration_since(dt.with_timezone(&Utc))
+                .to_std()
+                .ok()
+        })
+        .map(|duration| duration.as_secs())
 }
 
 #[cfg(test)]

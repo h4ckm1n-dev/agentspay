@@ -13,6 +13,8 @@ const config: Config = {
           DEFAULT: "#0a0a0b",
           elev: "#18181b",
           deep: "#000000",
+          panel: "#101014",
+          raised: "#202025",
         },
         border: {
           DEFAULT: "#27272a",
@@ -26,6 +28,8 @@ const config: Config = {
         },
         accent: {
           DEFAULT: "#10b981",
+          sky: "#38bdf8",
+          gold: "#fbbf24",
           glow: "rgba(16,185,129,0.45)",
         },
         terminal: {
@@ -64,9 +68,6 @@ const config: Config = {
           "Consolas",
           "monospace",
         ],
-      },
-      letterSpacing: {
-        tight: "-0.02em",
       },
     },
   },

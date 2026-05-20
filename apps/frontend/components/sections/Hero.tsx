@@ -1,102 +1,196 @@
 import Link from "next/link";
+import {
+  ArrowRight,
+  Braces,
+  CircleDollarSign,
+  LockKeyhole,
+  Play,
+  ReceiptText,
+  ShieldCheck,
+  Terminal,
+  Wallet,
+} from "lucide-react";
 import { LiveReceiptTicker } from "@/components/proof/LiveReceiptDeck";
+
+const METRICS = [
+  { label: "Per-call cap", value: "checked first", icon: LockKeyhole },
+  { label: "Daily policy", value: "ledger-backed", icon: ShieldCheck },
+  { label: "Settlement", value: "USDC devnet", icon: Wallet },
+  { label: "Receipts", value: "Solscan links", icon: ReceiptText },
+] as const;
+
+const FLOW = [
+  "MCP call",
+  "budget gate",
+  "x402 quote",
+  "SPL transfer",
+  "audit row",
+] as const;
+
+const CODE_LINES = [
+  ["tool", "agentspay_pay_url"],
+  ["max_amount_usdc", "0.50"],
+  ["policy", "per_call <= 1.00"],
+  ["network", "solana-devnet"],
+  ["status", "paid"],
+] as const;
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-border-subtle">
-      <div
-        className="absolute inset-0 bg-cover bg-center opacity-35"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, rgba(10,10,11,0.98) 0%, rgba(10,10,11,0.78) 46%, rgba(10,10,11,0.48) 100%), url('https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fit=crop&w=1800&q=80')",
-        }}
-        aria-hidden
-      />
-      <div className="relative mx-auto grid min-h-[72svh] max-w-6xl items-center gap-10 px-6 py-16 md:grid-cols-[1.05fr_0.95fr]">
-        <div>
-          <p className="mb-4 font-mono text-xs uppercase tracking-[0.12em] text-fg-muted">
-            ~/agentspay
-          </p>
-          <h1 className="max-w-3xl text-4xl font-semibold leading-[1.05] sm:text-6xl">
+    <section className="relative isolate overflow-hidden border-b border-border-subtle">
+      <RuntimeBackdrop />
+      <div className="section-shell relative flex min-h-[78svh] items-center py-14 sm:py-16 lg:py-20">
+        <div className="max-w-4xl">
+          <div className="section-kicker">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_18px_rgba(20,184,166,0.75)]" />
+            Local MCP wallet for agent payments
+          </div>
+
+          <h1 className="max-w-4xl text-5xl font-semibold leading-none text-fg sm:text-7xl lg:text-8xl">
             AgentsPay
           </h1>
-          <p className="mt-5 max-w-2xl text-base text-fg-muted sm:text-lg">
-            A USDC wallet your AI agent{" "}
-            <span className="text-fg">cannot drain</span>. Per-call and daily
-            caps are checked before signing. Settles on Solana in ~2 seconds.
-            Drops into Claude Code, Cursor, Cline, or Zed.
+          <p className="mt-6 max-w-2xl text-base leading-8 text-fg-muted sm:text-lg">
+            Give Claude Code, Cursor, Cline, or Zed a USDC wallet that can pay
+            x402 APIs without handing the agent an unlimited key. Budgets,
+            SSRF defense, mint validation, and audit proof sit before every
+            signature.
           </p>
+
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="#install"
-              className="rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-fg"
-            >
+            <Link href="#install" className="button-primary">
+              <Terminal className="h-4 w-4" aria-hidden />
               Install in Claude Code
             </Link>
+            <Link href="/demo" className="button-secondary">
+              <Play className="h-4 w-4" aria-hidden />
+              Run browser demo
+            </Link>
             <Link
-              href="/demo"
-              className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-fg transition hover:bg-bg-elev"
+              href="/docs"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-2 py-2.5 text-sm font-medium text-fg-muted transition hover:text-fg"
             >
-              Run the demo
+              Read docs
+              <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
-          <p className="mt-3 text-xs text-fg-muted">
-            Not in Claude Code? Use{" "}
-            <code className="font-mono text-fg">@agentspay/sdk-js</code> from
-            Node, or <code className="font-mono text-fg">@agentspay/cli</code>{" "}
-            from a shell. Same binary, same five tools.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs text-fg-muted">
-            <span>open source · MIT</span>
-            <span className="text-fg-faint">·</span>
-            <span>46 Rust + 10 TS tests</span>
-            <span className="text-fg-faint">·</span>
-            <span>
-              security audit (4 CRIT fixed){" "}
-              <Link
-                href="https://github.com/h4ckm1n/agentspay/blob/main/SECURITY-AUDIT.md"
-                className="text-accent underline-offset-4 hover:underline"
-              >
-                report
-              </Link>
-            </span>
-          </div>
-          <div className="mt-8">
-            <LiveReceiptTicker />
-          </div>
-        </div>
 
-        <div className="rounded-md border border-border bg-black/70 font-mono text-xs shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
-          <div className="flex items-center justify-between border-b border-border-subtle bg-bg-elev/80 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
-            </div>
-            <span className="text-fg-faint">mcp/v0.3</span>
+          <div className="mt-9 grid max-w-4xl gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {METRICS.map((metric) => {
+              const Icon = metric.icon;
+              return (
+                <div key={metric.label} className="metric-pill">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-accent/20 bg-accent/10 text-accent">
+                    <Icon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-fg">{metric.label}</span>
+                    <span className="block truncate text-fg-faint">
+                      {metric.value}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <div className="space-y-3 p-4 text-fg-muted">
-            <p>
-              <span className="text-syntax-punct">$ </span>
-              <span className="text-fg">agentspay_balance</span>
-            </p>
-            <pre className="whitespace-pre-wrap text-syntax-string">{`{
-  "available_usdc": "19.90",
-  "budget_remaining_today_usdc": "24.90",
-  "environment": "solana-devnet"
-}`}</pre>
-            <p>
-              <span className="text-syntax-punct">$ </span>
-              <span className="text-fg">
-                agentspay_pay_url max_amount_usdc=0.50
-              </span>
-            </p>
-            <p className="text-accent">
-              paid 0.10 USDC - receipt written to proof ledger
-            </p>
+
+          <div className="mt-8 max-w-3xl">
+            <LiveReceiptTicker />
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function RuntimeBackdrop() {
+  return (
+    <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,7,8,0.98)_0%,rgba(7,7,8,0.88)_42%,rgba(7,7,8,0.52)_100%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg to-transparent" />
+
+      <div className="absolute right-[-12rem] top-12 hidden w-[760px] rotate-[-3deg] lg:block">
+        <div className="tool-panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border-subtle bg-bg-elev/75 px-4 py-3 font-mono text-xs text-fg-muted">
+            <span>agentspay runtime</span>
+            <span className="text-accent">devnet/live</span>
+          </div>
+          <div className="grid grid-cols-[1fr_1.08fr] gap-px bg-border-subtle">
+            <div className="bg-bg-panel/90 p-5">
+              <div className="flex items-center gap-2 font-mono text-xs text-fg-muted">
+                <Braces className="h-4 w-4 text-accent" aria-hidden />
+                policy envelope
+              </div>
+              <div className="mt-4 space-y-2">
+                {CODE_LINES.map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-black/30 px-3 py-2 font-mono text-xs"
+                  >
+                    <span className="text-fg-muted">{key}</span>
+                    <span className="truncate text-syntax-string">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-bg-deep p-5 font-mono text-xs">
+              <div className="flex items-center justify-between text-fg-muted">
+                <span>x402 retry</span>
+                <span className="text-accent">signed</span>
+              </div>
+              <pre className="mt-4 whitespace-pre-wrap leading-6 text-syntax-string">{`{
+  "payment_status": "paid",
+  "amount_charged_usdc": "0.10",
+  "ledger_entry_id": "baf3...",
+  "explorer_url": "solscan.io/tx/..."
+}`}</pre>
+            </div>
+          </div>
+        </div>
+
+        <div className="ml-16 mt-4 grid grid-cols-5 gap-2">
+          {FLOW.map((item, index) => (
+            <div
+              key={item}
+              className="rounded-lg border border-border bg-bg-panel/70 p-3 shadow-[0_18px_70px_rgba(0,0,0,0.28)]"
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] uppercase text-fg-muted">
+                  0{index + 1}
+                </span>
+                {index === 3 ? (
+                  <CircleDollarSign
+                    className="h-4 w-4 text-accent-gold"
+                    aria-hidden
+                  />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                )}
+              </div>
+              <p className="min-h-8 text-xs leading-4 text-fg">{item}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="absolute bottom-8 right-5 hidden w-[420px] rounded-lg border border-border bg-bg-deep/70 p-4 font-mono text-xs text-fg-muted shadow-[0_24px_90px_rgba(0,0,0,0.32)] backdrop-blur md:block lg:right-28">
+        <div className="mb-3 flex items-center justify-between">
+          <span>local audit invariants</span>
+          <span className="text-accent">pre-sign</span>
+        </div>
+        {[
+          ["ssrf_guard", "pass"],
+          ["asset_mint", "USDC"],
+          ["decimals", "6"],
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            className="grid grid-cols-[1fr_auto] gap-3 border-t border-border-subtle py-2"
+          >
+            <span>{label}</span>
+            <span className="text-syntax-string">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

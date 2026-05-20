@@ -1,33 +1,48 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Database, ShieldCheck } from "lucide-react";
 import { LiveReceiptDeck } from "@/components/proof/LiveReceiptDeck";
 
 export function ProofStrip() {
   return (
-    <section className="mx-auto max-w-6xl px-6 py-14">
-      <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <p className="mb-2 font-mono text-xs uppercase tracking-[0.12em] text-accent">
-            LIVE PROOF
-          </p>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            The latest three bot-made devnet receipts.
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm text-fg-muted">
-            Every entry links to Solscan. You don&apos;t take our word for it,
-            the chain has the receipts. When the ledger has more receipts the
-            cards rotate through the recent set automatically.
-          </p>
+    <section className="border-b border-border-subtle bg-black/20 py-14 sm:py-16">
+      <div className="section-shell">
+        <div className="mb-7 grid gap-6 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+            <div className="section-kicker">
+              <Database className="h-3.5 w-3.5 text-accent" aria-hidden />
+              Live proof
+            </div>
+            <h2 className="max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
+              The product surface is the receipt trail.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-fg-muted sm:text-base">
+              No static screenshots. The homepage reads the same devnet ledger
+              as the proof page and rotates recent Solscan-confirmed agent
+              payments as they land.
+            </p>
+          </div>
+          <div className="quiet-panel p-4">
+            <div className="flex gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-accent/20 bg-accent/10 text-accent">
+                <ShieldCheck className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <p className="font-mono text-xs uppercase text-fg-muted">
+                  Audit invariant
+                </p>
+                <p className="mt-1 text-sm leading-6 text-fg">
+                  A signed payment creates a ledger row and a Solscan link.
+                </p>
+              </div>
+            </div>
+            <Link href="/proof" className="mt-4 button-secondary w-full">
+              View ledger
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+          </div>
         </div>
-        <Link
-          href="/proof"
-          className="inline-flex items-center gap-2 text-sm text-fg-muted transition hover:text-fg"
-        >
-          View ledger
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </Link>
+        <LiveReceiptDeck variant="strip" limit={12} visibleCount={3} />
       </div>
-      <LiveReceiptDeck variant="strip" limit={12} visibleCount={3} />
     </section>
   );
 }

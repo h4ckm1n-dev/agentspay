@@ -75,8 +75,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/sandbox/session", post(sandbox::create_session))
         .route("/api/sandbox/call", post(sandbox::call_tool))
         .route("/api/devnet/trigger", post(devnet::trigger))
+        .route("/api/devnet/payment-request", get(devnet::payment_request))
         .route("/api/devnet/wallet-status", get(devnet::wallet_status))
         .route("/api/stats/latest-tx", get(stats::latest_tx))
+        .route("/api/stats/transactions", get(stats::transactions))
         .layer(axum::middleware::from_fn_with_state(
             allowlist,
             origin_guard,
