@@ -30,6 +30,9 @@ desktop.ini
 *.pem
 *.key
 
+# MCP server config — contains API keys (e.g. 21st.dev Magic), operator-local.
+.mcp.json
+
 # ---------------------------------------------------------------------------
 # Rust
 # ---------------------------------------------------------------------------

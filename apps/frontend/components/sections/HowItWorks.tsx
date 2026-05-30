@@ -1,10 +1,6 @@
-import {
-  Binary,
-  Braces,
-  FileClock,
-  LockKeyhole,
-  Route,
-} from "lucide-react";
+import { Binary, Braces, FileClock, LockKeyhole, Route } from "lucide-react";
+import { Reveal } from "@/components/ui/Reveal";
+import { TiltCard } from "@/components/ui/TiltCard";
 
 const STEPS = [
   {
@@ -40,12 +36,12 @@ export function HowItWorks() {
   return (
     <section className="section-shell py-16 sm:py-20">
       <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-        <div>
+        <Reveal>
           <div className="section-kicker">
             <Braces className="h-3.5 w-3.5 text-accent" aria-hidden />
             Runtime contract
           </div>
-          <h2 className="max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
+          <h2 className="max-w-2xl text-3xl font-bold leading-tight sm:text-4xl lg:text-[2.75rem]">
             Small payment path, strict enough for autonomous agents.
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-6 text-fg-muted sm:text-base">
@@ -60,31 +56,30 @@ export function HowItWorks() {
               </div>
             ))}
           </div>
-        </div>
+        </Reveal>
 
         <div className="grid gap-3 md:grid-cols-2">
           {STEPS.map((step, index) => {
             const Icon = step.icon;
             return (
-              <article
-                key={step.title}
-                className="quiet-panel min-h-[210px] p-5 transition hover:border-accent/40 hover:bg-bg-panel/70"
-              >
-                <div className="mb-5 flex items-center justify-between">
-                  <span className="grid h-10 w-10 place-items-center rounded-md border border-border bg-bg-deep text-accent">
-                    <Icon className="h-5 w-5" aria-hidden />
-                  </span>
-                  <span className="font-mono text-xs text-fg-faint">
-                    0{index + 1}
-                  </span>
-                </div>
-                <h3 className="text-base font-semibold text-fg">
-                  {step.title}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-fg-muted">
-                  {step.body}
-                </p>
-              </article>
+              <Reveal key={step.title} delay={index * 0.07} className="h-full">
+                <TiltCard className="quiet-panel h-full min-h-[210px] p-5 transition-colors hover:border-accent/40 hover:bg-bg-panel/70">
+                  <div className="mb-5 flex items-center justify-between">
+                    <span className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-bg-deep text-accent">
+                      <Icon className="h-5 w-5" aria-hidden />
+                    </span>
+                    <span className="font-mono text-xs text-fg-faint">
+                      0{index + 1}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-semibold text-fg">
+                    {step.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-fg-muted">
+                    {step.body}
+                  </p>
+                </TiltCard>
+              </Reveal>
             );
           })}
         </div>

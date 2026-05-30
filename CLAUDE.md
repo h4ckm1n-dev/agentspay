@@ -9,6 +9,7 @@ Status: **v0.3, Solana devnet.** Mainnet is gated behind a v0.5 compliance revie
 **Roadmap:** [Plan.md](./Plan.md) is the active v3 plan with §15 v3.1 amendment (website + hosted demo scope).
 **Security:** [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) holds the threat model, the 12 findings (4 CRIT + 3 HIGH all fixed), and the adversarial test suite.
 **Activity log:** [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) is the append-only session log.
+**Design:** [DESIGN.md](./DESIGN.md) is the v2 "terminal-luxe" design system (tokens, type, motion). Read it before any visual/UI change; flag code that deviates.
 
 ## Core Mandates
 

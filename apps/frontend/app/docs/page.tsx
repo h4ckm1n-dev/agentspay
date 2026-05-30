@@ -332,7 +332,7 @@ export default function DocsPage() {
           </nav>
         </aside>
 
-        <div className="space-y-16">
+        <div className="min-w-0 space-y-16">
           <DocSection
             id="overview"
             eyebrow="01"
@@ -783,7 +783,10 @@ function DocSection({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-24 border-t border-border-subtle pt-10 first:border-t-0 first:pt-0">
+    <section
+      id={id}
+      className="scroll-mt-24 border-t border-border-subtle pt-10 first:border-t-0 first:pt-0"
+    >
       <p className="mb-2 font-mono text-xs text-accent">{eyebrow}</p>
       <h2 className="mb-4 text-2xl font-semibold text-fg sm:text-3xl">
         {title}
@@ -806,7 +809,7 @@ function ToolCard({ tool }: { tool: (typeof TOOL_REFERENCE)[number] }) {
         <span className="font-mono text-xs text-accent">{tool.call}</span>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-        <div>
+        <div className="min-w-0">
           <h4 className="mb-2 text-xs font-semibold uppercase text-fg">Args</h4>
           <CodePanel title="" code={tool.args} compact />
           <h4 className="mb-2 mt-4 text-xs font-semibold uppercase text-fg">
@@ -893,7 +896,7 @@ function CodePanel({
   compact?: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-bg-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-bg-deep shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       {title.length > 0 && (
         <div className="border-b border-border-subtle bg-bg-elev px-3 py-2 font-mono text-xs text-fg-muted">
           {title}

@@ -10,27 +10,36 @@ const config: Config = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0a0a0b",
-          elev: "#18181b",
+          DEFAULT: "#070708",
+          elev: "#0d0d10",
           deep: "#000000",
           panel: "#101014",
-          raised: "#202025",
+          raised: "#17171c",
         },
         border: {
           DEFAULT: "#27272a",
-          subtle: "#1f1f23",
+          subtle: "#1c1c20",
+          strong: "#33333a",
         },
         fg: {
           DEFAULT: "#fafafa",
           muted: "#a1a1aa",
           dim: "#71717a",
-          faint: "#52525b",
+          faint: "#5b5b63",
         },
         accent: {
           DEFAULT: "#10b981",
+          mint: "#34d399",
           sky: "#38bdf8",
           gold: "#fbbf24",
           glow: "rgba(16,185,129,0.45)",
+        },
+        // Reserved for the single most important state: a guardrail blocking a
+        // payment. Never used decoratively.
+        gate: {
+          DEFAULT: "#fbbf24",
+          soft: "rgba(251,191,36,0.08)",
+          line: "rgba(251,191,36,0.35)",
         },
         terminal: {
           green: "#a1f87f",
@@ -43,7 +52,6 @@ const config: Config = {
           null: "#f87171", // dim red — null
           punct: "#71717a", // dim grey — { } [ ] , : $ =
           cmd: "#fafafa", // bold white — shell command word
-          // 6 domain-aware tokens (Solana / fintech)
           signature: "#c084fc", // cool-violet — Solana tx signature (base58 86-88)
           pubkey: "#7dd3fc", // sky-blue — Solana pubkey (base58 32-44)
           usdc: "#34d399", // mint-green — USDC amount (key-aware)
@@ -53,21 +61,48 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: [
-          "Inter",
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "Segoe UI",
-          "sans-serif",
-        ],
+        display: ["var(--font-display)", "Satoshi", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: [
+          "var(--font-mono)",
           "ui-monospace",
           "SFMono-Regular",
-          "Menlo",
-          "Monaco",
-          "Consolas",
           "monospace",
         ],
+      },
+      letterSpacing: {
+        tightest: "-0.04em",
+      },
+      borderRadius: {
+        xl2: "1.125rem",
+      },
+      boxShadow: {
+        lift: "0 40px 120px rgba(0,0,0,0.55)",
+        panel: "0 24px 90px rgba(0,0,0,0.34)",
+      },
+      keyframes: {
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(14px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "aurora-drift": {
+          "0%, 100%": { transform: "translate3d(-2%, 0, 0) scale(1)" },
+          "50%": { transform: "translate3d(2%, -3%, 0) scale(1.06)" },
+        },
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        "gradient-shift": {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+        },
+      },
+      animation: {
+        "fade-up": "fade-up 0.6s cubic-bezier(0.22,1,0.36,1) both",
+        aurora: "aurora-drift 18s ease-in-out infinite",
+        marquee: "marquee 38s linear infinite",
+        gradient: "gradient-shift 6s ease-in-out infinite",
       },
     },
   },

@@ -1,4 +1,5 @@
 import { Hero } from "@/components/sections/Hero";
+import { HostMarquee } from "@/components/sections/HostMarquee";
 import { ProofStrip } from "@/components/sections/ProofStrip";
 import { HowItWorks } from "@/components/sections/HowItWorks";
 import { Install } from "@/components/sections/Install";
@@ -9,6 +10,7 @@ export default function Home() {
   return (
     <main>
       <Hero />
+      <HostMarquee />
       <ProofStrip />
       <HowItWorks />
       <Install />

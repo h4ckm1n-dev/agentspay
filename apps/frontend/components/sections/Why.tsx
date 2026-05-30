@@ -6,6 +6,8 @@ import {
   ShieldCheck,
   Wallet,
 } from "lucide-react";
+import { Reveal } from "@/components/ui/Reveal";
+import { TiltCard } from "@/components/ui/TiltCard";
 
 const CARDS = [
   {
@@ -34,12 +36,12 @@ export function Why() {
   return (
     <section className="section-shell py-16 sm:py-20">
       <div className="grid gap-8 lg:grid-cols-[1fr_0.82fr] lg:items-start">
-        <div>
+        <Reveal>
           <div className="section-kicker">
             <ShieldCheck className="h-3.5 w-3.5 text-accent" aria-hidden />
             Why it exists
           </div>
-          <h2 className="max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
+          <h2 className="max-w-3xl text-3xl font-bold leading-tight sm:text-4xl lg:text-[2.75rem]">
             Built for developers who are about to let agents touch money.
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-fg-muted sm:text-base">
@@ -47,9 +49,9 @@ export function Why() {
             boundary around one job: let an AI agent pay for useful APIs while
             keeping the spend policy obvious and enforceable.
           </p>
-        </div>
+        </Reveal>
 
-        <div className="tool-panel p-5">
+        <Reveal delay={0.08} className="tool-panel p-5">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-md border border-accent/20 bg-accent/10 text-accent">
               <BadgeDollarSign className="h-5 w-5" aria-hidden />
@@ -67,25 +69,24 @@ export function Why() {
             <StatusRow label="signing" value="local keypair" />
             <StatusRow label="mainnet" value="gated" />
           </div>
-        </div>
+        </Reveal>
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {CARDS.map((card) => {
+        {CARDS.map((card, index) => {
           const Icon = card.icon;
           return (
-            <article
-              key={card.title}
-              className="quiet-panel min-h-[210px] p-5 transition hover:border-accent/40 hover:bg-bg-panel/70"
-            >
-              <Icon className="mb-5 h-5 w-5 text-accent" aria-hidden />
-              <h3 className="text-sm font-semibold leading-6 text-fg">
-                {card.title}
-              </h3>
-              <p className="mt-3 text-xs leading-6 text-fg-muted">
-                {card.body}
-              </p>
-            </article>
+            <Reveal key={card.title} delay={index * 0.07} className="h-full">
+              <TiltCard className="quiet-panel h-full min-h-[210px] p-5 transition-colors hover:border-accent/40 hover:bg-bg-panel/70">
+                <Icon className="mb-5 h-5 w-5 text-accent" aria-hidden />
+                <h3 className="text-sm font-semibold leading-6 text-fg">
+                  {card.title}
+                </h3>
+                <p className="mt-3 text-xs leading-6 text-fg-muted">
+                  {card.body}
+                </p>
+              </TiltCard>
+            </Reveal>
           );
         })}
       </div>

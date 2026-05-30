@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { SiteNav } from "@/components/layout/SiteNav";
 import { SITE } from "@/lib/seo";
 import { StructuredData } from "@/components/seo/StructuredData";
+import { ScrollProgress } from "@/components/ui/ScrollProgress";
+import { satoshi, geist, jetbrainsMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -74,9 +76,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={`${satoshi.variable} ${geist.variable} ${jetbrainsMono.variable}`}
+    >
       <body>
         <StructuredData />
+        <ScrollProgress />
         <SiteNav />
         {children}
       </body>

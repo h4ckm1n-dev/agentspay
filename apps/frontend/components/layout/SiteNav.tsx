@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ExternalLink, FlaskConical, ReceiptText } from "lucide-react";
+import { BookOpen, FlaskConical, ReceiptText } from "lucide-react";
 import { AgentsPayMark } from "@/components/brand/AgentsPayMark";
+import { GitHubMark } from "@/components/brand/GitHubMark";
 
 const LINKS = [
   { href: "/demo", label: "Demo", icon: FlaskConical },
@@ -51,10 +52,12 @@ export function SiteNav() {
           })}
           <a
             href="https://github.com/h4ckm1n-dev/agentspay"
+            target="_blank"
+            rel="noopener noreferrer"
             className="ml-1 grid h-8 w-8 place-items-center rounded text-fg-muted transition hover:bg-bg-elev hover:text-fg"
-            aria-label="GitHub"
+            aria-label="AgentsPay on GitHub"
           >
-            <ExternalLink className="h-4 w-4" aria-hidden />
+            <GitHubMark className="h-4 w-4" />
           </a>
         </div>
       </nav>

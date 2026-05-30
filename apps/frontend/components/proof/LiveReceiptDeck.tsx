@@ -191,7 +191,12 @@ export function LiveReceiptTicker({
   const tx = transactions[offset];
 
   return (
-    <div className={cn("tool-panel overflow-hidden", className)}>
+    <div
+      className={cn(
+        "tool-panel flex min-h-[19rem] flex-col overflow-hidden",
+        className,
+      )}
+    >
       <div className="flex flex-col gap-3 border-b border-border-subtle bg-bg-elev/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-md border border-accent/20 bg-accent/10 text-accent">
@@ -216,7 +221,7 @@ export function LiveReceiptTicker({
       </div>
 
       {loading ? (
-        <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="grid flex-1 items-center gap-3 p-4 sm:grid-cols-[1fr_auto]">
           <div className="space-y-3">
             <div className="h-3 w-40 animate-pulse rounded bg-bg-raised" />
             <div className="h-5 w-64 max-w-full animate-pulse rounded bg-bg-raised" />
@@ -226,7 +231,7 @@ export function LiveReceiptTicker({
       ) : tx ? (
         <HeroReceipt tx={tx} rotating={transactions.length > 1} />
       ) : (
-        <div className="p-4">
+        <div className="flex flex-1 items-center p-4">
           <p className="text-sm leading-6 text-fg-muted">
             Live receipts will rotate here as bot traffic lands. Run the devnet
             demo to create the first visible settlement.
@@ -251,7 +256,7 @@ function HeroReceipt({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="group block p-4 transition hover:bg-bg-elev/40"
+      className="group flex flex-1 flex-col justify-center p-4 transition hover:bg-bg-elev/40"
     >
       <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
         <div className="min-w-0">

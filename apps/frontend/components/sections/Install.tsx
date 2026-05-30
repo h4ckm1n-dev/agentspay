@@ -1,5 +1,6 @@
 import { Code2, Command, Plug, Terminal } from "lucide-react";
 import { CodeBlock } from "@/components/ui/CodeBlock";
+import { Reveal } from "@/components/ui/Reveal";
 
 const PATHS = [
   {
@@ -27,12 +28,12 @@ export function Install() {
     <section id="install" className="border-y border-border-subtle bg-black/20">
       <div className="section-shell py-16 sm:py-20">
         <div className="grid gap-8 lg:grid-cols-[0.74fr_1.26fr] lg:items-start">
-          <div>
+          <Reveal>
             <div className="section-kicker">
               <Plug className="h-3.5 w-3.5 text-accent" aria-hidden />
               Developer install
             </div>
-            <h2 className="max-w-xl text-3xl font-semibold leading-tight sm:text-4xl">
+            <h2 className="max-w-xl text-3xl font-bold leading-tight sm:text-4xl lg:text-[2.75rem]">
               One local binary, three ways to integrate.
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-fg-muted sm:text-base">
@@ -43,15 +44,16 @@ export function Install() {
             <a href="/docs" className="mt-6 button-secondary">
               Open full docs
             </a>
-          </div>
+          </Reveal>
 
           <div className="grid gap-4">
             {PATHS.map((path, index) => {
               const Icon = path.icon;
               return (
-                <article
+                <Reveal
                   key={path.label}
-                  className="grid gap-4 rounded-lg border border-border bg-bg-panel/70 p-4 md:grid-cols-[220px_1fr]"
+                  delay={index * 0.08}
+                  className="grid gap-4 rounded-xl2 border border-border bg-bg-panel/70 p-4 transition hover:border-accent/30 md:grid-cols-[220px_1fr]"
                 >
                   <div className="flex items-start gap-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border bg-bg-deep text-accent">
@@ -70,7 +72,7 @@ export function Install() {
                     </div>
                   </div>
                   <CodeBlock value={path.code} />
-                </article>
+                </Reveal>
               );
             })}
           </div>

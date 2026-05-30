@@ -11,12 +11,7 @@ body {
   min-height: 100%;
   background: #070708;
   color: #fafafa;
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -29,21 +24,15 @@ body {
   position: relative;
   overflow-x: hidden;
   background:
-    linear-gradient(
-      180deg,
-      rgba(7, 7, 8, 0.98) 0%,
-      rgba(13, 13, 15, 0.98) 44%,
-      #070708 100%
+    radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(16, 185, 129, 0.1),
+      transparent 55%
     ),
-    linear-gradient(
-      145deg,
-      rgba(20, 184, 166, 0.12),
-      transparent 32%,
-      rgba(59, 130, 246, 0.1) 64%,
-      transparent
-    );
+    linear-gradient(180deg, #08080a 0%, #070708 60%, #060607 100%);
 }
 
+/* Fine grid that fades out below the fold — the "auditable surface" texture. */
 body::before {
   position: fixed;
   inset: 0;
@@ -51,10 +40,21 @@ body::before {
   pointer-events: none;
   content: "";
   background-image:
-    linear-gradient(rgba(250, 250, 250, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(250, 250, 250, 0.035) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.68), transparent 74%);
+    linear-gradient(rgba(250, 250, 250, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 250, 250, 0.028) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 70%);
+}
+
+/* Film grain — subtle texture so flat dark areas don't band. */
+body::after {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.04;
+  content: "";
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 * {
@@ -67,13 +67,57 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid rgba(56, 189, 248, 0.85);
+  outline: 2px solid rgba(16, 185, 129, 0.85);
   outline-offset: 3px;
 }
 
 ::selection {
-  background: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.28);
   color: #fafafa;
+}
+
+/* Accent-colored scrollbar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #10b981 #0d0d10;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0d10;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #34d399, #10b981);
+  border: 2px solid #0d0d10;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #6ee7b7, #10b981);
+}
+::-webkit-scrollbar-corner {
+  background: #0d0d10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display), "Satoshi", system-ui, sans-serif;
+    letter-spacing: -0.03em;
+  }
 }
 
 @keyframes accent-pulse {
@@ -96,64 +140,158 @@ a {
     @apply mx-auto w-full max-w-7xl px-5 sm:px-6 lg:px-8;
   }
 
+  /* Aurora glow for the top of a hero/section. Drop into a relative parent. */
+  .aurora {
+    position: absolute;
+    inset: -45% 0 auto 0;
+    height: 80%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        55% 60% at 22% 0%,
+        rgba(16, 185, 129, 0.22),
+        transparent 70%
+      ),
+      radial-gradient(
+        45% 50% at 80% 4%,
+        rgba(56, 189, 248, 0.1),
+        transparent 70%
+      );
+    filter: blur(6px);
+  }
+
   .page-band {
     @apply border-b border-border-subtle;
     background:
-      linear-gradient(120deg, rgba(20, 184, 166, 0.14), transparent 34%),
-      linear-gradient(320deg, rgba(96, 165, 250, 0.12), transparent 36%),
+      radial-gradient(90% 120% at 15% -20%, rgba(16, 185, 129, 0.12), transparent 55%),
       rgba(12, 12, 14, 0.84);
   }
 
   .page-hero {
-    @apply border-b border-border-subtle px-5 py-12 sm:px-6 sm:py-16 lg:px-8;
+    @apply relative isolate overflow-hidden border-b border-border-subtle px-5 py-14 sm:px-6 sm:py-20 lg:px-8;
     background:
-      linear-gradient(180deg, rgba(16, 16, 18, 0.88), rgba(7, 7, 8, 0.9)),
-      repeating-linear-gradient(
-        90deg,
-        rgba(250, 250, 250, 0.035) 0,
-        rgba(250, 250, 250, 0.035) 1px,
-        transparent 1px,
-        transparent 72px
-      );
+      radial-gradient(80% 100% at 20% -10%, rgba(16, 185, 129, 0.1), transparent 55%),
+      linear-gradient(180deg, rgba(13, 13, 16, 0.9), rgba(7, 7, 8, 0.92));
   }
 
   .eyebrow {
-    @apply font-mono text-xs font-medium uppercase tracking-normal text-accent;
+    @apply font-mono text-xs font-medium uppercase tracking-[0.14em] text-accent;
   }
 
   .surface-panel {
-    @apply rounded-lg border border-border bg-bg-panel/80 shadow-[0_24px_90px_rgba(0,0,0,0.34)] backdrop-blur;
+    @apply rounded-xl2 border border-border bg-bg-panel/80 shadow-panel backdrop-blur;
   }
 
   .tool-panel {
-    @apply rounded-lg border border-border bg-black/40 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur;
+    @apply rounded-xl2 border border-border-strong bg-bg-deep/60 shadow-lift backdrop-blur;
   }
 
   .quiet-panel {
-    @apply rounded-lg border border-border-subtle bg-bg-panel/50;
+    @apply rounded-xl2 border border-border-subtle bg-bg-panel/50 transition duration-200;
   }
 
   .button-primary {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-fg px-4 py-2.5 text-sm font-semibold text-bg transition hover:bg-white/90;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl2 bg-accent px-5 py-2.5 text-sm font-semibold text-bg-deep transition hover:-translate-y-0.5 hover:bg-accent-mint;
   }
 
   .button-secondary {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-border bg-bg-panel/70 px-4 py-2.5 text-sm font-medium text-fg transition hover:border-accent/50 hover:bg-bg-raised/70;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl2 border border-border-strong bg-bg-panel/70 px-5 py-2.5 text-sm font-medium text-fg transition hover:border-accent/60 hover:bg-bg-raised/70;
   }
 
   .icon-button {
-    @apply grid h-9 w-9 shrink-0 place-items-center rounded-md border border-border bg-bg-panel/70 text-fg-muted transition hover:border-accent/50 hover:text-fg;
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-bg-panel/70 text-fg-muted transition hover:border-accent/50 hover:text-fg;
   }
 
   .metric-pill {
-    @apply inline-flex min-h-14 items-center gap-3 rounded-lg border border-border bg-black/40 px-3 py-2 font-mono text-xs text-fg-muted;
+    @apply inline-flex min-h-14 items-center gap-3 rounded-xl2 border border-border bg-white/[0.012] px-3.5 py-2.5 text-xs text-fg-muted transition hover:border-accent/30;
   }
 
   .section-kicker {
-    @apply mb-3 inline-flex items-center gap-2 rounded-md border border-border bg-black/30 px-2.5 py-1.5 font-mono text-xs uppercase text-fg-muted;
+    @apply mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-white/[0.015] px-3 py-1.5 font-mono text-xs uppercase tracking-[0.12em] text-fg-muted;
   }
 
   .code-chip {
-    @apply rounded-md border border-border bg-bg-deep px-2 py-1 font-mono text-xs text-syntax-string;
+    @apply rounded-lg border border-border bg-bg-deep px-2.5 py-1.5 font-mono text-xs text-syntax-string;
+  }
+}
+
+@layer utilities {
+  /* Soft emerald halo for the hero artifact and other "hero" panels. */
+  .glow-emerald {
+    box-shadow:
+      0 0 0 1px rgba(16, 185, 129, 0.16),
+      0 40px 120px -28px rgba(16, 185, 129, 0.3),
+      0 30px 90px rgba(0, 0, 0, 0.55);
+  }
+
+  /* Amber halo — only for the blocked-payment state. */
+  .glow-gate {
+    box-shadow:
+      0 0 0 1px rgba(251, 191, 36, 0.28),
+      0 40px 120px -30px rgba(251, 191, 36, 0.22);
+  }
+
+  /* 1px gradient border via masked padding-box trick. */
+  .gradient-hairline {
+    position: relative;
+  }
+  .gradient-hairline::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      140deg,
+      rgba(16, 185, 129, 0.55),
+      rgba(56, 189, 248, 0.18) 40%,
+      transparent 70%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Animated gradient sheen on the primary CTA. */
+  .cta-glow {
+    position: relative;
+    background-image: linear-gradient(
+      110deg,
+      #10b981 0%,
+      #34d399 45%,
+      #10b981 100%
+    );
+    background-size: 200% 100%;
+    box-shadow: 0 10px 40px -12px rgba(16, 185, 129, 0.6);
+    transition:
+      background-position 0.5s ease,
+      box-shadow 0.25s ease,
+      transform 0.15s ease;
+  }
+  .cta-glow:hover {
+    background-position: 100% 0;
+    box-shadow: 0 14px 50px -10px rgba(16, 185, 129, 0.75);
+    transform: translateY(-1px);
+  }
+
+  /* Gradient text for the headline accent. Sized 200% so it can shimmer via
+     the `animate-gradient` utility. */
+  .text-gradient-emerald {
+    background-image: linear-gradient(
+      110deg,
+      #34d399 0%,
+      #10b981 30%,
+      #38bdf8 55%,
+      #10b981 80%,
+      #34d399 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }
