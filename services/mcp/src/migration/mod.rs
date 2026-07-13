@@ -8,6 +8,7 @@ use sea_orm_migration::prelude::*;
 
 mod m20260513_000001_init;
 mod m20260514_000001_solana;
+mod m20260712_000001_mandate;
 
 pub struct Migrator;
 
@@ -17,6 +18,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20260513_000001_init::Migration),
             Box::new(m20260514_000001_solana::Migration),
+            Box::new(m20260712_000001_mandate::Migration),
         ]
     }
 }

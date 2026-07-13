@@ -13,6 +13,11 @@ pub struct Model {
     pub agent_id: String,
     pub daily_usd: f64,
     pub per_call_usd: f64,
+    /// Comma-separated base58 pubkey allowlist. NULL/empty = any recipient.
+    #[sea_orm(column_type = "Text", nullable)]
+    pub allowed_recipients: Option<String>,
+    /// Optional mandate expiry — payments are refused after this instant.
+    pub not_after: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
 }
 

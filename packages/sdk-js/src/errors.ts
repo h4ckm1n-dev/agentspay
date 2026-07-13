@@ -15,6 +15,8 @@ export type AgentsPayErrorCode =
   | "per_call_cap_exceeded"
   | "network_mismatch"
   | "x402_settlement_failed"
+  | "policy_rejected"
+  | "duplicate_payment"
   | "unknown";
 
 export interface AgentsPayErrorOptions {
@@ -132,29 +134,84 @@ export class X402SettlementError extends ToolError {
   }
 }
 
+/** The payment was refused by policy: recipient not allowlisted, mandate expired. */
+export class PolicyRejectedError extends ToolError {
+  constructor(message: string, options: AgentsPayErrorOptions = {}) {
+    super("pay_url", message, "policy_rejected", options);
+    this.name = "PolicyRejectedError";
+  }
+}
+
+/** An idempotency key was reused: the payment already settled or is in flight. */
+export class DuplicatePaymentError extends ToolError {
+  constructor(message: string, options: AgentsPayErrorOptions = {}) {
+    super("pay_url", message, "duplicate_payment", options);
+    this.name = "DuplicatePaymentError";
+  }
+}
+
+/** Extract the machine-readable `reason` the server puts in the error data. */
+function reasonOf(details: unknown): string {
+  if (typeof details === "object" && details !== null && "reason" in details) {
+    const reason = (details as { readonly reason?: unknown }).reason;
+    return typeof reason === "string" ? reason : "";
+  }
+  return "";
+}
+
 /**
- * Map an rmcp-style error message to the most specific error class.
- * The MCP server emits human-readable messages; we pattern-match a few common
- * ones to produce a typed error the caller can `instanceof` against.
+ * Map a server error to the most specific error class. The server puts a
+ * machine-readable `reason` in the JSON-RPC error `data` — that is the
+ * primary signal; the prose patterns below are a fallback for older
+ * binaries. Fixture strings in errors.test.ts mirror the real wire
+ * messages emitted by services/mcp/src/main.rs.
  */
 export function classifyToolError(
   tool: string,
   message: string,
   details?: unknown,
 ): ToolError {
-  const lower = message.toLowerCase();
   const options = { details };
 
-  if (lower.includes("per-call cap") || lower.includes("per_call cap")) {
+  switch (reasonOf(details)) {
+    case "per_call_budget":
+    case "above_call_cap":
+      return new PerCallCapExceededError(message, options);
+    case "daily_budget":
+      return new BudgetExceededError(message, options);
+    case "recipient_not_allowed":
+    case "mandate_expired":
+      return new PolicyRejectedError(message, options);
+    case "duplicate_payment":
+    case "payment_in_flight":
+      return new DuplicatePaymentError(message, options);
+    case "settlement_failed":
+      return new X402SettlementError(message, options);
+    case "ssrf_blocked":
+      return new InvalidInputError(tool, message, options);
+    default:
+      break;
+  }
+
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("per-call budget") ||
+    lower.includes("per_call_cap") ||
+    lower.includes("exceeds max_amount_usdc")
+  ) {
     return new PerCallCapExceededError(message, options);
   }
-  if (lower.includes("daily cap") || lower.includes("budget exceeded")) {
+  if (
+    lower.includes("exceed today's remaining budget") ||
+    lower.includes("daily_cap")
+  ) {
     return new BudgetExceededError(message, options);
   }
-  if (lower.includes("network mismatch") || lower.includes("network must")) {
+  if (lower.includes("does not match the locally configured network")) {
     return new NetworkMismatchError(message, options);
   }
   if (
+    lower.includes("x402 payment flow failed") ||
     lower.includes("facilitator") ||
     lower.includes("settle") ||
     lower.includes("verify")
@@ -163,6 +220,7 @@ export function classifyToolError(
   }
   if (
     lower.includes("not a valid url") ||
+    lower.includes("url rejected") ||
     lower.includes("invalid params") ||
     lower.includes("must parse")
   ) {

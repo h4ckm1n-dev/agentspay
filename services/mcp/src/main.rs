@@ -37,7 +37,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use uuid::Uuid;
 
 use crate::{
-    repo::{new_audit, new_ledger_entry, LedgerRepo},
+    repo::{new_audit, LedgerRepo, ReserveOutcome},
     wallet::AgentWallet,
     x402::{NetworkMode, PaidResponse, PreparedOrSettled, X402Client, X402Error},
 };
@@ -69,7 +69,13 @@ const TOPUP_INSTRUCTIONS: &str = "1. Open the faucet URL in a browser. \
 
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 struct BalanceResponse {
+    /// On solana networks this is the real on-chain USDC balance
+    /// (or "unknown" when the RPC lookup fails — see `note`).
+    /// In sandbox mode it is the simulated ledger balance.
     available_usdc: String,
+    /// SOL available for transaction fees, on solana networks only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    available_sol: Option<String>,
     budget_remaining_today_usdc: String,
     daily_cap_usdc: String,
     per_call_cap_usdc: String,
@@ -78,6 +84,10 @@ struct BalanceResponse {
     environment: String,
     /// Base58 Solana public key the agent will sign x402 payments with.
     solana_pubkey: String,
+    /// Guidance when something needs the user's attention (unfunded wallet,
+    /// RPC failure). Absent when everything is nominal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -86,6 +96,11 @@ struct PayUrlRequest {
     url: String,
     /// Maximum amount of USDC to authorise for this call (decimal string).
     max_amount_usdc: String,
+    /// Optional caller-supplied key. Reusing a key that already settled
+    /// returns an error naming the original payment instead of paying twice —
+    /// pass one when retrying a call that may have already gone through.
+    #[serde(default)]
+    idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Serialize, schemars::JsonSchema)]
@@ -105,6 +120,10 @@ struct PayUrlResponse {
     network: String,
     /// Solscan URL for the on-chain TX when applicable; empty otherwise.
     explorer_url: String,
+    /// Total spent today (UTC) including this call, so the agent can plan
+    /// the next call without another balance round-trip.
+    today_spent_usdc: String,
+    budget_remaining_today_usdc: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -113,6 +132,16 @@ struct SetBudgetRequest {
     daily_usd: f64,
     /// Per-call spending cap in USD (must be > 0).
     per_call_usd: f64,
+    /// Optional recipient allowlist (base58 Solana pubkeys). When set,
+    /// payments to any other `payTo` are refused before signing. Omit to
+    /// keep the stored list; pass an empty array to clear it (allow any).
+    #[serde(default)]
+    allowed_recipients: Option<Vec<String>>,
+    /// Optional RFC3339 expiry for this budget mandate. Payments are
+    /// refused after this instant. Omit to keep the stored value; pass an
+    /// empty string to clear it.
+    #[serde(default)]
+    not_after_rfc3339: Option<String>,
 }
 
 #[derive(Debug, Serialize, schemars::JsonSchema)]
@@ -120,6 +149,10 @@ struct SetBudgetResponse {
     agent_id: String,
     daily_usd: f64,
     per_call_usd: f64,
+    /// Active recipient allowlist; empty = any recipient.
+    allowed_recipients: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_after_rfc3339: Option<String>,
     updated_at_rfc3339: String,
 }
 
@@ -231,8 +264,46 @@ impl AgentsPayServer {
         };
         let remaining = (daily_cap - today_spent).max(0.0);
 
+        // Real Solana modes report the actual on-chain balances; the DB
+        // wallet row is only meaningful in sandbox mode.
+        let (available_usdc, available_sol, note) = if self.network.is_real_solana() {
+            let rpc =
+                solana_client::nonblocking::rpc_client::RpcClient::new(solana::default_rpc_url());
+            let owner = self.wallet.pubkey();
+            match tokio::try_join!(
+                solana::usdc_balance_base_units(&rpc, owner),
+                solana::sol_balance_lamports(&rpc, owner),
+            ) {
+                Ok((usdc_units, lamports)) => {
+                    let usdc = format_usdc_base_units(usdc_units);
+                    let sol = format!("{:.4}", lamports as f64 / 1e9);
+                    let note = if usdc_units == 0 || lamports == 0 {
+                        Some(
+                            "wallet is unfunded (USDC and/or SOL for fees is 0) — \
+                            call agentspay_topup_info for faucet instructions"
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    };
+                    (usdc, Some(sol), note)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "on-chain balance lookup failed");
+                    (
+                        "unknown".to_string(),
+                        None,
+                        Some(format!("on-chain balance lookup failed: {e}")),
+                    )
+                }
+            }
+        } else {
+            (wallet_row.available_usdc, None, None)
+        };
+
         let response = BalanceResponse {
-            available_usdc: wallet_row.available_usdc,
+            available_usdc,
+            available_sol,
             budget_remaining_today_usdc: format!("{remaining:.2}"),
             daily_cap_usdc: format!("{daily_cap:.2}"),
             per_call_cap_usdc: format!("{per_call_cap:.2}"),
@@ -240,6 +311,7 @@ impl AgentsPayServer {
             currency: CURRENCY.to_string(),
             environment: self.environment().to_string(),
             solana_pubkey: self.wallet.pubkey_base58(),
+            note,
         };
 
         let result = json_result(&response);
@@ -319,9 +391,23 @@ impl AgentsPayServer {
                 start.elapsed().as_millis(),
                 pretty::ToolOutcome::Err("url rejected by ssrf guard"),
             );
+            // Operator remediation goes to stderr only — the wire error must
+            // not teach a prompt-injected agent how to disable the guard.
+            tracing::warn!(
+                host = ?parsed.host_str(),
+                detail = reason,
+                "SSRF guard rejected URL. Operators running against intentionally \
+                private hosts (local demo, compose network) can opt out with \
+                AGENTSPAY_ALLOW_PRIVATE_HOSTS=1."
+            );
             return Err(McpError::invalid_params(
-                format!("url rejected: {reason}. Set AGENTSPAY_ALLOW_PRIVATE_HOSTS=1 only on hosts you trust to expose internal services through this MCP."),
-                Some(json!({ "field": "url", "host": parsed.host_str(), "reason": reason })),
+                format!("url rejected: internal or non-public host is blocked ({reason})"),
+                Some(json!({
+                    "field": "url",
+                    "host": parsed.host_str(),
+                    "reason": "ssrf_blocked",
+                    "detail": reason,
+                })),
             ));
         }
         let max_amount: f64 = match req.max_amount_usdc.parse() {
@@ -387,7 +473,26 @@ impl AgentsPayServer {
                         "ok payment_status=none".to_string(),
                     ))
                     .await;
-                let result = reply_paid_response(req.url, paid, "0.00".to_string(), &self.network);
+                let today_spent = self
+                    .repo
+                    .today_spending(DEFAULT_AGENT_ID)
+                    .await
+                    .map_err(db_err)?;
+                let daily_cap = self
+                    .repo
+                    .get_budget(DEFAULT_AGENT_ID)
+                    .await
+                    .map_err(db_err)?
+                    .map(|b| b.daily_usd)
+                    .unwrap_or(DEFAULT_DAILY_BUDGET_USD);
+                let result = reply_paid_response(
+                    req.url,
+                    paid,
+                    "0.00".to_string(),
+                    &self.network,
+                    today_spent,
+                    (daily_cap - today_spent).max(0.0),
+                );
                 pretty::emit_tool_event(
                     "pay_url",
                     env_name,
@@ -463,56 +568,198 @@ impl AgentsPayServer {
             .map_err(|e| McpError::internal_error(format!("malformed amount: {e}"), None))?;
         let required_usdc: f64 = required_usdc_str.parse().unwrap_or(f64::INFINITY);
 
-        if let Some(budget) = self
+        // Caps are enforced even when the user never called
+        // agentspay_set_budget — a fresh install gets the same defaults the
+        // balance tool displays. (Previously a missing budget row silently
+        // skipped every check.)
+        let budget_row = self
             .repo
             .get_budget(DEFAULT_AGENT_ID)
             .await
+            .map_err(db_err)?;
+        let (daily_cap_usd, per_call_cap_usd) = budget_row
+            .as_ref()
+            .map(|b| (b.daily_usd, b.per_call_usd))
+            .unwrap_or((DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_BUDGET_USD));
+
+        if required_usdc > per_call_cap_usd {
+            let _ = self
+                .repo
+                .insert_audit_entry(new_audit(
+                    DEFAULT_AGENT_ID,
+                    "agentspay_pay_url",
+                    Some(req.url.clone()),
+                    Some(required_usdc_str.clone()),
+                    format!(
+                        "rejected reason=per-call-budget required={required_usdc_str} per_call_cap={per_call_cap_usd:.2}",
+                    ),
+                ))
+                .await;
+            let detail =
+                format!("budget: per_call_cap={per_call_cap_usd:.2} exceeded (required={required_usdc_str})");
+            pretty::emit_tool_event(
+                "pay_url",
+                env_name,
+                start.elapsed().as_millis(),
+                pretty::ToolOutcome::Err(&detail),
+            );
+            return Err(McpError::invalid_params(
+                format!(
+                    "endpoint price exceeds configured per-call budget \
+                    (required={required_usdc_str} per_call_cap={per_call_cap_usd:.2}). \
+                    If this payment is intended, ask the user to raise the cap \
+                    via agentspay_set_budget."
+                ),
+                Some(json!({
+                    "required_usdc": required_usdc_str,
+                    "per_call_cap_usd": per_call_cap_usd,
+                    "reason": "per_call_budget",
+                })),
+            ));
+        }
+
+        // Mandate checks: expiry and recipient allowlist (opt-in via
+        // agentspay_set_budget; empty allowlist = any recipient).
+        if let Some(b) = budget_row.as_ref() {
+            if let Some(expiry) = b.not_after {
+                if chrono::Utc::now() > expiry {
+                    let _ = self
+                        .repo
+                        .insert_audit_entry(new_audit(
+                            DEFAULT_AGENT_ID,
+                            "agentspay_pay_url",
+                            Some(req.url.clone()),
+                            Some(required_usdc_str.clone()),
+                            format!(
+                                "rejected reason=mandate-expired not_after={}",
+                                expiry.to_rfc3339()
+                            ),
+                        ))
+                        .await;
+                    pretty::emit_tool_event(
+                        "pay_url",
+                        env_name,
+                        start.elapsed().as_millis(),
+                        pretty::ToolOutcome::Err("mandate expired"),
+                    );
+                    return Err(McpError::invalid_params(
+                        format!(
+                            "the spending mandate expired at {} — ask the user to \
+                            refresh it via agentspay_set_budget",
+                            expiry.to_rfc3339()
+                        ),
+                        Some(json!({
+                            "not_after_rfc3339": expiry.to_rfc3339(),
+                            "reason": "mandate_expired",
+                        })),
+                    ));
+                }
+            }
+            let pay_to = prepared.requirement.pay_to.as_str();
+            if let Some(list) = b
+                .allowed_recipients
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                if !list.split(',').map(str::trim).any(|p| p == pay_to) {
+                    let _ = self
+                        .repo
+                        .insert_audit_entry(new_audit(
+                            DEFAULT_AGENT_ID,
+                            "agentspay_pay_url",
+                            Some(req.url.clone()),
+                            Some(required_usdc_str.clone()),
+                            format!("rejected reason=recipient-not-allowed pay_to={pay_to}"),
+                        ))
+                        .await;
+                    pretty::emit_tool_event(
+                        "pay_url",
+                        env_name,
+                        start.elapsed().as_millis(),
+                        pretty::ToolOutcome::Err("recipient not in allowlist"),
+                    );
+                    return Err(McpError::invalid_params(
+                        format!(
+                            "recipient {pay_to} is not in the configured allowlist — \
+                            if this seller is legitimate, ask the user to add it via \
+                            agentspay_set_budget allowed_recipients"
+                        ),
+                        Some(json!({
+                            "pay_to": pay_to,
+                            "reason": "recipient_not_allowed",
+                        })),
+                    ));
+                }
+            }
+        }
+
+        // Idempotency: a key that already settled must not pay twice.
+        let mut reuse_row_id: Option<String> = None;
+        if let Some(key) = req.idempotency_key.as_deref() {
+            if let Some(existing) = self
+                .repo
+                .find_by_idempotency_key(key)
+                .await
+                .map_err(db_err)?
+            {
+                if existing.status.starts_with("failed") {
+                    // Prior attempt never settled — reuse its row for the retry.
+                    reuse_row_id = Some(existing.id);
+                } else {
+                    let (reason, msg) = if existing.status.starts_with("pending") {
+                        (
+                            "payment_in_flight",
+                            "a payment with this idempotency_key is still settling — \
+                            wait and check agentspay_audit_log before retrying",
+                        )
+                    } else {
+                        (
+                            "duplicate_payment",
+                            "a payment with this idempotency_key already settled — \
+                            not paying again; the original result is referenced below",
+                        )
+                    };
+                    pretty::emit_tool_event(
+                        "pay_url",
+                        env_name,
+                        start.elapsed().as_millis(),
+                        pretty::ToolOutcome::Err(reason),
+                    );
+                    return Err(McpError::invalid_params(
+                        msg.to_string(),
+                        Some(json!({
+                            "reason": reason,
+                            "payment_id": existing.payment_id,
+                            "transaction": existing.transaction_id,
+                            "status": existing.status,
+                            "amount_usdc": existing.amount_usdc,
+                        })),
+                    ));
+                }
+            }
+        }
+
+        // Reserve BEFORE settling: the daily-cap check and a `pending`
+        // ledger row commit in one transaction, so money that moves
+        // on-chain is always counted even if we crash mid-settle.
+        let payment_id = format!("pay_{}", Uuid::new_v4().simple());
+        let reserved = match self
+            .repo
+            .reserve_payment(
+                DEFAULT_AGENT_ID,
+                &req.url,
+                &required_usdc_str,
+                &payment_id,
+                req.idempotency_key.clone(),
+                reuse_row_id,
+                required_usdc,
+                daily_cap_usd,
+            )
+            .await
             .map_err(db_err)?
         {
-            if required_usdc > budget.per_call_usd {
-                let _ = self
-                    .repo
-                    .insert_audit_entry(new_audit(
-                        DEFAULT_AGENT_ID,
-                        "agentspay_pay_url",
-                        Some(req.url.clone()),
-                        Some(required_usdc_str.clone()),
-                        format!(
-                            "rejected reason=per-call-budget required={required_usdc_str} per_call_cap={:.2}",
-                            budget.per_call_usd
-                        ),
-                    ))
-                    .await;
-                let detail = format!(
-                    "budget: per_call_cap={:.2} exceeded (required={required_usdc_str})",
-                    budget.per_call_usd
-                );
-                pretty::emit_tool_event(
-                    "pay_url",
-                    env_name,
-                    start.elapsed().as_millis(),
-                    pretty::ToolOutcome::Err(&detail),
-                );
-                return Err(McpError::invalid_params(
-                    format!(
-                        "endpoint price exceeds configured per-call budget \
-                        (required={required_usdc_str} per_call_cap={:.2})",
-                        budget.per_call_usd
-                    ),
-                    Some(json!({
-                        "required_usdc": required_usdc_str,
-                        "per_call_cap_usd": budget.per_call_usd,
-                        "reason": "per_call_budget",
-                    })),
-                ));
-            }
-
-            let today_spend = self
-                .repo
-                .today_spending(DEFAULT_AGENT_ID)
-                .await
-                .map_err(db_err)?;
-            if today_spend + required_usdc > budget.daily_usd {
+            ReserveOutcome::Reserved(model) => model,
+            ReserveOutcome::OverDailyCap { today_spent } => {
                 let _ = self
                     .repo
                     .insert_audit_entry(new_audit(
@@ -522,14 +769,12 @@ impl AgentsPayServer {
                         Some(required_usdc_str.clone()),
                         format!(
                             "rejected reason=daily-budget required={required_usdc_str} \
-                            today_spent={today_spend:.2} daily_cap={:.2}",
-                            budget.daily_usd
+                            today_spent={today_spent:.2} daily_cap={daily_cap_usd:.2}",
                         ),
                     ))
                     .await;
                 let detail = format!(
-                    "budget: daily_cap={:.2} would be exceeded (today={today_spend:.2} + req={required_usdc_str})",
-                    budget.daily_usd
+                    "budget: daily_cap={daily_cap_usd:.2} would be exceeded (today={today_spent:.2} + req={required_usdc_str})",
                 );
                 pretty::emit_tool_event(
                     "pay_url",
@@ -540,19 +785,20 @@ impl AgentsPayServer {
                 return Err(McpError::invalid_params(
                     format!(
                         "this call would exceed today's remaining budget \
-                        (required={required_usdc_str} today_spent={today_spend:.2} \
-                        daily_cap={:.2})",
-                        budget.daily_usd
+                        (required={required_usdc_str} today_spent={today_spent:.2} \
+                        daily_cap={daily_cap_usd:.2}). The budget resets at UTC \
+                        midnight; ask the user to raise it via agentspay_set_budget \
+                        if this payment is intended."
                     ),
                     Some(json!({
                         "required_usdc": required_usdc_str,
-                        "today_spent_usd": today_spend,
-                        "daily_cap_usd": budget.daily_usd,
+                        "today_spent_usd": today_spent,
+                        "daily_cap_usd": daily_cap_usd,
                         "reason": "daily_budget",
                     })),
                 ));
             }
-        }
+        };
 
         // ---- 5. Phase 2: sign + retry.
         let PaidResponse {
@@ -564,6 +810,15 @@ impl AgentsPayServer {
             Ok(ok) => ok,
             Err(e) => {
                 tracing::warn!(error = %e, url = %req.url, "agentspay_pay_url complete failed");
+                // Release the reservation so the failed attempt stops
+                // counting against today's budget.
+                if let Err(mark_err) = self
+                    .repo
+                    .mark_payment_failed(&reserved.id, &e.to_string())
+                    .await
+                {
+                    tracing::warn!(error = %mark_err, "failed to mark reservation as failed");
+                }
                 let _ = self
                     .repo
                     .insert_audit_entry(new_audit(
@@ -581,15 +836,20 @@ impl AgentsPayServer {
                     start.elapsed().as_millis(),
                     pretty::ToolOutcome::Err(&detail),
                 );
+                let funding_hint = if self.network.is_real_solana() {
+                    " If the wallet lacks USDC (or SOL for fees), call \
+                    agentspay_topup_info for funding instructions."
+                } else {
+                    ""
+                };
                 return Err(McpError::internal_error(
-                    format!("x402 payment flow failed: {e}"),
-                    Some(json!({ "url": req.url })),
+                    format!("x402 payment flow failed: {e}.{funding_hint}"),
+                    Some(json!({ "url": req.url, "reason": "settlement_failed" })),
                 ));
             }
         };
 
-        // ---- 6. Persist ledger + audit.
-        let payment_id = format!("pay_{}", Uuid::new_v4().simple());
+        // ---- 6. Finalize the reserved ledger row + audit.
         let (amount_usdc_str, transaction, payment_status) = match (&settlement, &requirement) {
             (Some(settlement), Some(req_obj)) => {
                 let amount = req_obj
@@ -600,30 +860,38 @@ impl AgentsPayServer {
             _ => ("0.00".to_string(), String::new(), "none".to_string()),
         };
 
-        let ledger_active = new_ledger_entry(
-            DEFAULT_AGENT_ID,
-            req.url.clone(),
-            amount_usdc_str.clone(),
-            payment_id.clone(),
-            transaction.clone(),
-            format!("ok status={status}"),
-        );
+        let pay_to_note = requirement
+            .as_ref()
+            .map(|r| format!(" pay_to={}", r.pay_to))
+            .unwrap_or_default();
         let audit_active = new_audit(
             DEFAULT_AGENT_ID,
             "agentspay_pay_url",
             Some(req.url.clone()),
             Some(amount_usdc_str.clone()),
             format!(
-                "ok payment_status={payment_status} network={}",
+                "ok payment_status={payment_status} network={}{pay_to_note}",
                 self.environment()
             ),
         );
 
         let (ledger_model, _audit_model) = self
             .repo
-            .record_paid_call(ledger_active, audit_active)
+            .finalize_payment(
+                &reserved.id,
+                format!("ok status={status}"),
+                transaction.clone(),
+                audit_active,
+            )
             .await
             .map_err(db_err)?;
+
+        let today_spent = self
+            .repo
+            .today_spending(DEFAULT_AGENT_ID)
+            .await
+            .map_err(db_err)?;
+        let remaining_today = (daily_cap_usd - today_spent).max(0.0);
 
         // ---- 7. Reply.
         let explorer_url = explorer_url_for(&self.network, &transaction);
@@ -656,11 +924,17 @@ impl AgentsPayServer {
             payment_status,
             network: self.environment().to_string(),
             explorer_url,
+            today_spent_usdc: format!("{today_spent:.2}"),
+            budget_remaining_today_usdc: format!("{remaining_today:.2}"),
         };
         json_result(&response)
     }
 
-    #[tool(description = "Set daily and per-call USDC spending budget for the agent.")]
+    #[tool(
+        description = "Set the agent's spending mandate: daily and per-call USDC caps, \
+        an optional recipient allowlist (base58 pubkeys — payments to anyone else are refused), \
+        and an optional RFC3339 expiry. Caps default to 50/50 USDC until set."
+    )]
     async fn agentspay_set_budget(
         &self,
         Parameters(req): Parameters<SetBudgetRequest>,
@@ -669,9 +943,48 @@ impl AgentsPayServer {
         validate_positive_amount("daily_usd", req.daily_usd)?;
         validate_positive_amount("per_call_usd", req.per_call_usd)?;
 
+        // Outer None = leave stored value unchanged; empty list/string = clear.
+        let allowed_recipients: Option<Option<String>> = match &req.allowed_recipients {
+            None => None,
+            Some(list) if list.is_empty() => Some(None),
+            Some(list) => {
+                for entry in list {
+                    if entry.trim().parse::<solana_sdk::pubkey::Pubkey>().is_err() {
+                        return Err(McpError::invalid_params(
+                            format!("allowed_recipients entry {entry:?} is not a valid base58 Solana pubkey"),
+                            Some(json!({ "field": "allowed_recipients", "value": entry })),
+                        ));
+                    }
+                }
+                Some(Some(
+                    list.iter().map(|s| s.trim()).collect::<Vec<_>>().join(","),
+                ))
+            }
+        };
+        let not_after: Option<Option<chrono::DateTime<chrono::Utc>>> =
+            match req.not_after_rfc3339.as_deref().map(str::trim) {
+                None => None,
+                Some("") => Some(None),
+                Some(ts) => match chrono::DateTime::parse_from_rfc3339(ts) {
+                    Ok(dt) => Some(Some(dt.with_timezone(&chrono::Utc))),
+                    Err(e) => {
+                        return Err(McpError::invalid_params(
+                            format!("not_after_rfc3339 is not a valid RFC3339 timestamp: {e}"),
+                            Some(json!({ "field": "not_after_rfc3339", "value": ts })),
+                        ));
+                    }
+                },
+            };
+
         let budget = self
             .repo
-            .upsert_budget(DEFAULT_AGENT_ID, req.daily_usd, req.per_call_usd)
+            .upsert_budget(
+                DEFAULT_AGENT_ID,
+                req.daily_usd,
+                req.per_call_usd,
+                allowed_recipients,
+                not_after,
+            )
             .await
             .map_err(db_err)?;
 
@@ -693,6 +1006,13 @@ impl AgentsPayServer {
             agent_id: budget.agent_id,
             daily_usd: budget.daily_usd,
             per_call_usd: budget.per_call_usd,
+            allowed_recipients: budget
+                .allowed_recipients
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.split(',').map(|p| p.trim().to_string()).collect())
+                .unwrap_or_default(),
+            not_after_rfc3339: budget.not_after.map(|dt| dt.to_rfc3339()),
             updated_at_rfc3339: budget.updated_at.to_rfc3339(),
         };
         let detail = format!(
@@ -797,9 +1117,16 @@ impl ServerHandler for AgentsPayServer {
             },
             instructions: Some(
                 "AgentsPay v0.3 — budget-controlled USDC wallet for autonomous agents. \
-                Signs real Solana devnet SPL token transfers by default. Tools: \
-                agentspay_balance, agentspay_pay_url, agentspay_set_budget, \
-                agentspay_audit_log, agentspay_topup_info."
+                Signs real Solana devnet SPL token transfers by default. Typical \
+                workflow: agentspay_balance to check funds and remaining budget → \
+                agentspay_pay_url(url, max_amount_usdc) to pay an x402-priced \
+                endpoint (pass an idempotency_key when retrying) → on a budget \
+                rejection, ask the user before raising caps via \
+                agentspay_set_budget (which also takes an optional recipient \
+                allowlist and mandate expiry). agentspay_audit_log shows every \
+                payment and rejection; agentspay_topup_info explains funding an \
+                empty wallet. Per-call and daily caps are enforced before any \
+                signing — default 50/50 USDC until set_budget is called."
                     .to_string(),
             ),
         }
@@ -963,6 +1290,8 @@ fn reply_paid_response(
     paid: PaidResponse,
     amount_charged_usdc: String,
     network: &NetworkMode,
+    today_spent: f64,
+    remaining_today: f64,
 ) -> Result<CallToolResult, McpError> {
     let response = PayUrlResponse {
         status: "ok".to_string(),
@@ -975,8 +1304,24 @@ fn reply_paid_response(
         payment_status: "none".to_string(),
         network: network.wire_name().to_string(),
         explorer_url: String::new(),
+        today_spent_usdc: format!("{today_spent:.2}"),
+        budget_remaining_today_usdc: format!("{remaining_today:.2}"),
     };
     json_result(&response)
+}
+
+/// Render a base-unit USDC amount (6 decimals) as a decimal string with at
+/// least two and at most six fractional digits ("10.00", "0.123456").
+fn format_usdc_base_units(units: u64) -> String {
+    let mut s = format!("{}.{:06}", units / 1_000_000, units % 1_000_000);
+    while s.ends_with('0') {
+        let decimals = s.len() - s.find('.').map(|i| i + 1).unwrap_or(s.len());
+        if decimals <= 2 {
+            break;
+        }
+        s.pop();
+    }
+    s
 }
 
 /// Compact "GmBDzs…jYau" form of a base58 signature for stderr display.
@@ -1170,6 +1515,15 @@ mod tests {
         assert!(ssrf_block("https://example.com/quote").is_ok());
         assert!(ssrf_block("http://8.8.8.8/").is_ok());
         assert!(ssrf_block("http://[2606:4700::1111]/").is_ok());
+    }
+
+    #[test]
+    fn usdc_base_units_format() {
+        assert_eq!(format_usdc_base_units(0), "0.00");
+        assert_eq!(format_usdc_base_units(10_000_000), "10.00");
+        assert_eq!(format_usdc_base_units(10_100_000), "10.10");
+        assert_eq!(format_usdc_base_units(123_456), "0.123456");
+        assert_eq!(format_usdc_base_units(1_000_001), "1.000001");
     }
 
     #[test]

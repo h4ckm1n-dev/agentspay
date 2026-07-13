@@ -24,6 +24,10 @@ pub struct Model {
     pub transaction_id: String,
     #[sea_orm(column_type = "Text")]
     pub status: String,
+    /// Caller-supplied idempotency key (unique when present) so a retried
+    /// `pay_url` can be detected instead of settling twice.
+    #[sea_orm(unique, indexed, column_type = "Text", nullable)]
+    pub idempotency_key: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 

@@ -25,13 +25,16 @@ Out of scope for this audit: physical access, the host OS, the Solana RPC provid
 | CRIT-3 | Critical | `pay_url` x402 flow | **Fixed** |
 | CRIT-4 | Critical | web-shim rate limits | **Fixed** |
 | HIGH-1 | High | Docker images | **Fixed** |
-| HIGH-2 | High | wallet keypair file | Accepted risk |
+| HIGH-2 | High | wallet keypair file | **Mitigated** (recipient allowlist, 2026-07) |
 | HIGH-3 | High | frontend API proxy | **Fixed** |
 | MED-1 | Medium | wallet write TOCTOU | Accepted risk |
 | MED-2 | Medium | mainnet USDC mint | Accepted risk |
 | LOW-1 | Low | logging | Verified clean |
 | LOW-2 | Low | SQL injection | Verified clean (parameterized) |
 | LOW-3 | Low | session IDs | Verified clean (UUIDv4) |
+| CRIT-5 | Critical | budget enforcement | **Fixed** (2026-07 follow-up) |
+| HIGH-4 | High | pay_url retry double-pay | **Fixed** (2026-07 follow-up) |
+| MED-3 | Medium | SSRF error message | **Fixed** (2026-07 follow-up) |
 
 ---
 
@@ -77,7 +80,9 @@ Out of scope for this audit: physical access, the host OS, the Solana RPC provid
 
 **Vector.** By design of x402, the seller dictates `payTo`. The agent will sign to whatever pubkey appears there, with no allowlist or reputation check. A malicious URL fed to `pay_url` (e.g. via prompt injection) can extract up to `per_call_cap_usd` per call and `daily_cap_usd` per day, sending to an attacker pubkey.
 
-**Status. ACCEPTED RISK.** This is the budget cap's job. The mitigations CRIT-1 + CRIT-2 + the SSRF guard below close every multiplier that was inflating the damage. A future v0.x improvement is a `~/.agentspay/payee-allowlist` / `payee-denylist` config; not in scope for v0.3.
+**Status. MITIGATED (2026-07).** `agentspay_set_budget` now takes an optional `allowed_recipients` list (base58 pubkeys, validated on input) and an optional `not_after_rfc3339` mandate expiry, stored on the budget row. When the allowlist is set, `pay_url` rejects any `requirement.payTo` outside it *before signing*, with a structured `recipient_not_allowed` error and an audit row; an expired mandate rejects with `mandate_expired`. Empty/unset allowlist preserves the old allow-any behavior, and a plain cap update leaves the stored mandate untouched (two-level upsert semantics in `repo::upsert_budget`). Residual risk: allowlist is opt-in — a user who never sets one is still bounded only by the caps.
+
+**Tests.** `repo::tests::upsert_budget_mandate_semantics` + live smoke (rejection → allowlist → settle).
 
 ## HIGH-3 — Frontend `/api/[...path]` proxy did not validate path segments
 
@@ -108,6 +113,34 @@ Out of scope for this audit: physical access, the host OS, the Solana RPC provid
 ## LOW-3 — Session ID generation
 
 **Verified.** `services/web-shim/src/session.rs` uses `Uuid::new_v4()`. 122 bits of entropy — not enumerable.
+
+---
+
+# 2026-07 follow-up findings (multi-specialist review, all fixed)
+
+## CRIT-5 — Budget caps were not enforced until `set_budget` was called once
+
+**Vector.** The entire per-call + daily cap block in `agentspay_pay_url` was wrapped in `if let Some(budget) = repo.get_budget(...)` with **no else branch**, and nothing ever seeded a budget row on first run. On a fresh install the only spend limit was `max_amount_usdc` — a value chosen by the agent itself, i.e. by whatever prompt-injected it. Meanwhile `agentspay_balance` *displayed* the 50/50 USDC defaults as if enforced, so the human reading the transcript reasonably believed the wallet was protected. Direct violation of Core Mandate #1.
+
+**Fix.** Cap resolution now falls back to `DEFAULT_DAILY_BUDGET_USD` (50/50) when no budget row exists, and both checks run unconditionally — the enforced values are exactly the displayed values. `services/mcp/src/main.rs` (budget-enforcement block).
+
+**Tests.** Enforcement path exercised via `repo::tests::reserve_rejects_over_daily_cap` + live smoke on a fresh DB.
+
+## HIGH-4 — Retry after a mid-settle failure could pay twice, and settled money could escape the daily cap
+
+**Vector.** Settlement executed *before* the ledger write. If the DB write failed, or the caller's timeout killed the subprocess mid-settle, money had moved on-chain but `today_spending` never saw it — the caller would naturally retry and pay again, with the first payment invisible to the daily cap. Additionally the SDK/web-shim deployment model (one process per call) meant two concurrent `pay_url` calls could both pass the cap check before either recorded.
+
+**Fix.** Two-phase ledger: `repo::reserve_payment` re-checks the daily cap and inserts a `pending` ledger row in one SQLite transaction *before* signing; `finalize_payment` / `mark_payment_failed` flip it after. Pending rows count toward `today_spending`; failed rows are released. `pay_url` accepts an optional `idempotency_key` (unique-indexed): a key that already settled returns a structured `duplicate_payment` error naming the original transaction instead of re-paying; an in-flight key returns `payment_in_flight`; a failed key recycles its row. Residual: cross-process cap races are narrowed to the gap between two write transactions, not eliminated (single-user local wallet; revisit with `BEGIN IMMEDIATE` if throughput ever matters).
+
+**Tests.** `repo::tests::{pending_reservation_counts_toward_daily_spend, failed_payment_is_released_from_budget, idempotency_key_lookup_and_failed_row_reuse}` + live smoke (duplicate key refused after settle).
+
+## MED-3 — SSRF rejection error taught the agent how to disable the guard
+
+**Vector.** The wire error for a blocked URL included "Set `AGENTSPAY_ALLOW_PRIVATE_HOSTS=1` …". In hosts where the agent can edit its own MCP env (Claude Code `.mcp.json`), a prompt-injected agent probing IMDS was handed the bypass string.
+
+**Fix.** The wire error now says only "internal or non-public host is blocked" with a structured `reason: "ssrf_blocked"`; the operator remediation moved to a `tracing::warn!` on stderr. `services/mcp/src/main.rs`.
+
+Also landed in the same pass (agent-trust, not vulnerabilities): `agentspay_balance` reports the **real on-chain USDC + SOL** on solana networks instead of a hardcoded DB value; budget errors name `agentspay_set_budget` as the recovery path; the SDK error classifier keys on the server's structured `data.reason` (the prose patterns it previously matched never occurred in real wire messages, so every typed error class was dead code in production).
 
 ---
 

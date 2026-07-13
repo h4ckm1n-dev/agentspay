@@ -64,6 +64,9 @@ export class AgentsPayClient {
     const args: JsonValue = {
       url: input.url,
       max_amount_usdc: input.maxAmountUsdc,
+      ...(input.idempotencyKey !== undefined
+        ? { idempotency_key: input.idempotencyKey }
+        : {}),
     };
     const result = await callTool(this.config, "agentspay_pay_url", args);
     return result as unknown as PayUrlResponse;
@@ -89,6 +92,12 @@ export class AgentsPayClient {
     const args: JsonValue = {
       daily_usd: input.dailyUsd,
       per_call_usd: input.perCallUsd,
+      ...(input.allowedRecipients !== undefined
+        ? { allowed_recipients: [...input.allowedRecipients] }
+        : {}),
+      ...(input.notAfterRfc3339 !== undefined
+        ? { not_after_rfc3339: input.notAfterRfc3339 }
+        : {}),
     };
     const result = await callTool(this.config, "agentspay_set_budget", args);
     return result as unknown as SetBudgetResponse;

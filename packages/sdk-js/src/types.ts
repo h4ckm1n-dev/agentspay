@@ -69,7 +69,13 @@ export interface AgentsPayClientOptions {
 // ---------------------------------------------------------------------------
 
 export interface BalanceResponse {
+  /**
+   * Real on-chain USDC balance on solana networks ("unknown" when the RPC
+   * lookup fails — see `note`); the simulated ledger balance in sandbox.
+   */
   readonly available_usdc: string;
+  /** SOL available for transaction fees; present on solana networks only. */
+  readonly available_sol?: string;
   readonly budget_remaining_today_usdc: string;
   readonly daily_cap_usdc: string;
   readonly per_call_cap_usdc: string;
@@ -78,6 +84,8 @@ export interface BalanceResponse {
   readonly environment: Network;
   /** Base58 Solana pubkey the agent will sign x402 payments with. */
   readonly solana_pubkey: string;
+  /** Guidance when something needs attention (unfunded wallet, RPC failure). */
+  readonly note?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +96,12 @@ export interface PayUrlInput {
   readonly url: string;
   /** Maximum USDC to authorize for this call, as a decimal string. */
   readonly maxAmountUsdc: string;
+  /**
+   * Optional caller-supplied key. Reusing a key that already settled makes
+   * the server return a `duplicate_payment` error naming the original
+   * payment instead of paying twice — pass one when retrying.
+   */
+  readonly idempotencyKey?: string;
 }
 
 export interface PayUrlResponse {
@@ -104,6 +118,9 @@ export interface PayUrlResponse {
   readonly network: Network;
   /** Solscan URL for the on-chain TX when applicable; empty otherwise. */
   readonly explorer_url: string;
+  /** Total spent today (UTC) including this call. */
+  readonly today_spent_usdc: string;
+  readonly budget_remaining_today_usdc: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,12 +132,26 @@ export interface SetBudgetInput {
   readonly dailyUsd: number;
   /** Per-call spending cap in USD. Must be > 0. */
   readonly perCallUsd: number;
+  /**
+   * Optional recipient allowlist (base58 Solana pubkeys). Payments to any
+   * other `payTo` are refused before signing. Omit to keep the stored list;
+   * pass an empty array to clear it (allow any recipient).
+   */
+  readonly allowedRecipients?: readonly string[];
+  /**
+   * Optional RFC3339 mandate expiry — payments are refused after this
+   * instant. Omit to keep the stored value; pass "" to clear it.
+   */
+  readonly notAfterRfc3339?: string;
 }
 
 export interface SetBudgetResponse {
   readonly agent_id: string;
   readonly daily_usd: number;
   readonly per_call_usd: number;
+  /** Active recipient allowlist; empty = any recipient. */
+  readonly allowed_recipients: readonly string[];
+  readonly not_after_rfc3339?: string;
   readonly updated_at_rfc3339: string;
 }
 
