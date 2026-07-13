@@ -16,7 +16,7 @@
     "url": "https://github.com/h4ckm1n-dev/agentspay.git",
     "directory": "packages/cli"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "agentspay": "./dist/index.js"

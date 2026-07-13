@@ -17,7 +17,7 @@
     "url": "https://github.com/h4ckm1n-dev/agentspay.git",
     "directory": "packages/sdk-js"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

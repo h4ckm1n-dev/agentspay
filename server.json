@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.h4ckm1n-dev/agentspay",
+  "description": "A budget-controlled USDC wallet for AI agents. Your agent can pay x402-priced APIs on Solana — but per-call and daily caps are checked before it ever signs, so it can spend without being able to drain the wallet. Keys stay on your machine: no account, no email, no OTP, no enclave.",
+  "title": "AgentsPay",
+  "repository": {
+    "url": "https://github.com/h4ckm1n-dev/agentspay",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/h4ckm1n-dev/agentspay",
+  "version": "0.3.0",
+  "packages": [
+    {
+      "registryType": "cargo",
+      "registryBaseUrl": "https://crates.io",
+      "identifier": "agentspay-mcp",
+      "version": "0.3.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AGENTSPAY_NETWORK",
+          "description": "Which network to sign on: 'sandbox', 'solana-devnet' (default), or 'solana-mainnet' (gated behind a compliance review, not for use today).",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "solana-devnet"
+        },
+        {
+          "name": "AGENTSPAY_KEYPAIR_PATH",
+          "description": "Path to the agent's Solana keypair file. Created with mode 0600 on first run if absent.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "~/.agentspay/keypair.json"
+        },
+        {
+          "name": "AGENTSPAY_DATABASE_URL",
+          "description": "SQLite ledger database URL (SeaORM).",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "sqlite://~/.agentspay/agentspay-mcp.db"
+        },
+        {
+          "name": "AGENTSPAY_SOLANA_RPC_URL",
+          "description": "Solana RPC endpoint used for balance lookups and settlement.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "https://api.devnet.solana.com"
+        }
+      ]
+    }
+  ]
+}

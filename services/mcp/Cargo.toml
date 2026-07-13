@@ -3,6 +3,12 @@ name = "agentspay-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "A budget-controlled USDC wallet for AI agents as a local MCP server. Pays x402-priced APIs on Solana with per-call and daily caps enforced before signing, so an agent can spend but cannot drain the wallet."
+repository = "https://github.com/h4ckm1n-dev/agentspay"
+homepage = "https://github.com/h4ckm1n-dev/agentspay"
+readme = "README.md"
+keywords = ["mcp", "solana", "x402", "usdc", "agent"]
+categories = ["command-line-utilities", "cryptography::cryptocurrencies"]
 
 [[bin]]
 name = "agentspay-mcp"

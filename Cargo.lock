@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-auth"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "agentspay-proto",
  "anyhow",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-gateway"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-mcp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-metering"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "agentspay-proto",
  "anyhow",
@@ -130,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-paid-endpoint-demo"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-payment"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "agentspay-proto",
  "anyhow",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-proto"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "agentspay-web-shim"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",

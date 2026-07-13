@@ -10,7 +10,7 @@ A local MCP server that gives Claude Code, Cursor, Cline, and Zed agents a budge
 
 [Website](https://agentspay.dev) · [Docs](https://agentspay.dev/docs) · [Live proof](https://agentspay.dev/proof) · [Security audit](SECURITY-AUDIT.md)
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-46_Rust_%2B_10_TS-blue.svg)](#development)
 [![Network](https://img.shields.io/badge/network-Solana_devnet-9945ff.svg)](https://solscan.io/?cluster=devnet)
 [![Security](https://img.shields.io/badge/security-audited_4_CRIT_fixed-success.svg)](SECURITY-AUDIT.md)
@@ -162,4 +162,4 @@ Useful entry points:
 
 ## License
 
-MIT.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
