@@ -36,6 +36,24 @@ pub const SANDBOX_NETWORK: &str = "sandbox";
 pub const SOLANA_DEVNET_NETWORK: &str = "solana-devnet";
 pub const SOLANA_MAINNET_NETWORK: &str = "solana-mainnet";
 
+/// x402 v2 (spec 2025-12-11) identifies networks by CAIP-2 rather than the
+/// v1 bare strings above. The Solana CAIP-2 id is `solana:<first-32-chars-of-
+/// base58-genesis-hash>`. We accept both forms so a v2 seller interoperates.
+pub const SOLANA_DEVNET_CAIP2: &str = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+pub const SOLANA_MAINNET_CAIP2: &str = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+
+/// Map a wire network identifier to AgentsPay's canonical bare name. Accepts
+/// both x402 v1 bare names (`solana-devnet`) and x402 v2 CAIP-2 identifiers
+/// (`solana:EtWTRABZ…`). Unknown values pass through unchanged so the
+/// network-mismatch error still surfaces the seller's raw string verbatim.
+pub fn canonical_network(raw: &str) -> &str {
+    match raw {
+        SOLANA_DEVNET_CAIP2 => SOLANA_DEVNET_NETWORK,
+        SOLANA_MAINNET_CAIP2 => SOLANA_MAINNET_NETWORK,
+        other => other,
+    }
+}
+
 /// Sandbox-mode placeholder address used in the EIP-3009-style authorization.
 pub const SANDBOX_FROM_ADDRESS: &str = "agentspay_local_agent";
 /// Sandbox-mode placeholder signature.
@@ -136,10 +154,15 @@ pub struct PaymentRequiredBody {
 pub struct PaymentRequirement {
     pub scheme: String,
     pub network: String,
-    #[serde(rename = "maxAmountRequired")]
+    /// Amount in token base units, as a decimal string. x402 v1 names this
+    /// `maxAmountRequired`; v2 (2025-12-11) renamed it `amount`. The alias
+    /// accepts either so both seller versions deserialize.
+    #[serde(rename = "maxAmountRequired", alias = "amount")]
     pub max_amount_required: String,
+    /// v1 sends a URL string; v2 may send a `ResourceInfo` object. We never
+    /// consume it structurally, so keep it as raw JSON to tolerate both.
     #[serde(default)]
-    pub resource: Option<String>,
+    pub resource: Option<serde_json::Value>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(rename = "mimeType", default)]
@@ -419,7 +442,7 @@ impl<'a> X402Client<'a> {
         let requirement = challenge
             .accepts
             .iter()
-            .find(|r| r.network == configured)
+            .find(|r| canonical_network(&r.network) == configured)
             .cloned()
             .or_else(|| challenge.accepts.into_iter().next())
             .ok_or(X402Error::NoAcceptsEntries)?;
@@ -499,7 +522,7 @@ impl<'a> X402Client<'a> {
 
     async fn build_payment_header(&self, prepared: &PreparedPayment) -> Result<String, X402Error> {
         let configured = self.mode.wire_name();
-        if prepared.requirement.network != configured {
+        if canonical_network(&prepared.requirement.network) != configured {
             return Err(X402Error::NetworkMismatch {
                 requirement: prepared.requirement.network.clone(),
                 configured: configured.to_string(),
@@ -858,5 +881,83 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&decoded).expect("json");
         assert_eq!(parsed["network"], "sandbox");
         assert_eq!(parsed["payload"]["signature"], SANDBOX_SIGNATURE);
+    }
+
+    // ------------------------------------------------------------------
+    // x402 v2 wire compatibility (spec 2025-12-11). A v2 seller renames
+    // `maxAmountRequired` -> `amount`, uses CAIP-2 network ids, and may send
+    // `resource` as an object. These pin that both v1 and v2 challenges
+    // deserialize and that CAIP-2 ids normalize to our mode's wire name.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn canonical_network_maps_caip2_and_passes_through() {
+        assert_eq!(
+            canonical_network(SOLANA_DEVNET_CAIP2),
+            SOLANA_DEVNET_NETWORK
+        );
+        assert_eq!(
+            canonical_network(SOLANA_MAINNET_CAIP2),
+            SOLANA_MAINNET_NETWORK
+        );
+        // v1 bare names are already canonical.
+        assert_eq!(canonical_network("solana-devnet"), "solana-devnet");
+        // Unknown networks pass through so NetworkMismatch shows them raw.
+        assert_eq!(canonical_network("ethereum:1"), "ethereum:1");
+    }
+
+    #[test]
+    fn v2_challenge_parses_with_amount_and_caip2_network() {
+        // A v2 seller: x402Version 2, `amount` (not maxAmountRequired),
+        // CAIP-2 devnet network, and `resource` as a structured object.
+        let body = serde_json::json!({
+            "x402Version": 2,
+            "accepts": [{
+                "scheme": "exact",
+                "network": SOLANA_DEVNET_CAIP2,
+                "amount": "100000",
+                "resource": { "url": "https://api.example.com/quote", "method": "GET" },
+                "payTo": "HE5JxfV1VVxrjXNW9ybopevF9uQwyWmJZrYXZxiv7Btv",
+                "asset": crate::solana::USDC_MINT_DEVNET,
+                "extra": { "decimals": 6, "feePayer": "HE5JxfV1VVxrjXNW9ybopevF9uQwyWmJZrYXZxiv7Btv" }
+            }]
+        });
+        let challenge: PaymentRequiredBody =
+            serde_json::from_value(body).expect("v2 challenge must deserialize");
+        assert_eq!(challenge.x402_version, Some(2));
+        let r = &challenge.accepts[0];
+        assert_eq!(r.max_amount_required, "100000");
+        assert_eq!(r.amount_base_units().unwrap(), 100_000);
+        assert_eq!(r.decimals().unwrap(), 6);
+        // The CAIP-2 network normalizes to the devnet wire name our mode uses.
+        assert_eq!(
+            canonical_network(&r.network),
+            NetworkMode::SolanaDevnet.wire_name()
+        );
+    }
+
+    #[test]
+    fn v1_challenge_still_parses() {
+        // Regression: the original v1 shape (maxAmountRequired, bare network,
+        // string resource) must keep working alongside v2.
+        let body = serde_json::json!({
+            "x402Version": 1,
+            "accepts": [{
+                "scheme": "exact",
+                "network": "solana-devnet",
+                "maxAmountRequired": "100000",
+                "resource": "https://api.example.com/quote",
+                "payTo": "HE5JxfV1VVxrjXNW9ybopevF9uQwyWmJZrYXZxiv7Btv",
+                "asset": crate::solana::USDC_MINT_DEVNET,
+                "extra": { "decimals": 6 }
+            }]
+        });
+        let challenge: PaymentRequiredBody =
+            serde_json::from_value(body).expect("v1 challenge must still deserialize");
+        assert_eq!(challenge.accepts[0].max_amount_required, "100000");
+        assert_eq!(
+            canonical_network(&challenge.accepts[0].network),
+            NetworkMode::SolanaDevnet.wire_name()
+        );
     }
 }
