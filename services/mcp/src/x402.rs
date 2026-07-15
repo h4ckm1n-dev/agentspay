@@ -28,7 +28,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    solana::{build_usdc_transfer_tx, default_rpc_url, encode_transaction_b64},
+    solana::{
+        build_sponsored_usdc_transfer_tx, build_usdc_transfer_tx, default_rpc_url,
+        encode_transaction_b64, encode_versioned_transaction_b64,
+    },
     wallet::AgentWallet,
 };
 
@@ -108,6 +111,8 @@ pub enum X402Error {
     },
     #[error("requirement.payTo {0:?} is not a valid Solana pubkey: {1}")]
     InvalidPayTo(String, String),
+    #[error("requirement.extra.feePayer {0:?} is not a valid Solana pubkey: {1}")]
+    InvalidFeePayer(String, String),
     #[error("failed to serialize x402 payload: {0}")]
     Serialize(String),
     #[error("solana transaction build failed: {0}")]
@@ -178,6 +183,26 @@ pub struct PaymentRequirement {
 }
 
 impl PaymentRequirement {
+    /// `extra.feePayer` — the facilitator account that sponsors the fee under
+    /// the x402 SVM "exact" scheme. Present means: build a partially-signed
+    /// versioned transaction with the facilitator as fee payer. Absent means
+    /// the legacy self-relay path (our demo seller), where the agent pays.
+    pub fn fee_payer(&self) -> Option<&str> {
+        self.extra
+            .as_ref()
+            .and_then(|v| v.get("feePayer"))
+            .and_then(|v| v.as_str())
+    }
+
+    /// `extra.memo` — optional seller-supplied memo. When absent the client
+    /// must supply a random nonce instead (see [`crate::solana`]).
+    pub fn memo(&self) -> Option<&str> {
+        self.extra
+            .as_ref()
+            .and_then(|v| v.get("memo"))
+            .and_then(|v| v.as_str())
+    }
+
     pub fn decimals(&self) -> Result<u32, X402Error> {
         self.extra
             .as_ref()
@@ -286,6 +311,10 @@ pub struct PaidResponse {
 pub struct PreparedPayment {
     pub requirement: PaymentRequirement,
     pub x402_version: u8,
+    /// The chosen `accepts[]` entry exactly as the seller sent it. x402 v2
+    /// payloads echo it back under `accepted`, so echoing the raw JSON keeps
+    /// fields we don't model (v2 `extensions`, future additions) intact.
+    pub raw_requirement: Option<serde_json::Value>,
 }
 
 pub enum PreparedOrSettled {
@@ -433,19 +462,30 @@ impl<'a> X402Client<'a> {
         let challenge_text = read_body_bounded(initial, MAX_BODY_BYTES).await?;
         let challenge: PaymentRequiredBody = serde_json::from_str(&challenge_text)
             .map_err(|e| X402Error::Malformed402(format!("{e}: {challenge_text}")))?;
+        // Kept alongside the typed parse so we can echo the chosen accepts[]
+        // entry back verbatim in a v2 payload.
+        let raw_challenge: serde_json::Value =
+            serde_json::from_str(&challenge_text).unwrap_or(serde_json::Value::Null);
 
         // Prefer the first accept that matches our active network so an
         // ambiguous seller (e.g. one that lists both sandbox and devnet)
         // can still settle with us. Falls back to the first entry — the
         // network-mismatch check in `complete()` then yields a clear error.
         let configured = self.mode.wire_name();
-        let requirement = challenge
+        let index = challenge
             .accepts
             .iter()
-            .find(|r| canonical_network(&r.network) == configured)
+            .position(|r| canonical_network(&r.network) == configured)
+            .unwrap_or(0);
+        let requirement = challenge
+            .accepts
+            .get(index)
             .cloned()
-            .or_else(|| challenge.accepts.into_iter().next())
             .ok_or(X402Error::NoAcceptsEntries)?;
+        let raw_requirement = raw_challenge
+            .get("accepts")
+            .and_then(|a| a.get(index))
+            .cloned();
 
         // In real-signing modes the agent ONLY transfers USDC. Reject
         // sellers that quote a different mint or different decimals — both
@@ -482,6 +522,7 @@ impl<'a> X402Client<'a> {
         Ok(PreparedOrSettled::PaymentRequired(PreparedPayment {
             requirement,
             x402_version: challenge.x402_version.unwrap_or(1),
+            raw_requirement,
         }))
     }
 
@@ -581,19 +622,97 @@ async fn build_solana_header(
     )?;
     let amount = prepared.requirement.amount_base_units()?;
 
-    tracing::info!(
-        payer = %wallet.pubkey_base58(),
-        recipient = %recipient,
-        amount_base_units = amount,
-        network = %prepared.requirement.network,
-        "signing solana usdc transfer for x402 payment"
-    );
+    // Two settlement shapes, chosen by whether the seller named a facilitator
+    // fee payer. `extra.feePayer` present => the real SVM "exact" scheme: a
+    // partially-signed versioned tx the facilitator sponsors and submits.
+    // Absent => the legacy path our demo seller speaks, where the agent is
+    // fee payer, fully signs, and the seller self-relays.
+    let encoded_tx = match prepared.requirement.fee_payer() {
+        Some(fee_payer_str) => {
+            let fee_payer: Pubkey =
+                fee_payer_str
+                    .parse()
+                    .map_err(|e: solana_sdk::pubkey::ParsePubkeyError| {
+                        X402Error::InvalidFeePayer(fee_payer_str.to_string(), e.to_string())
+                    })?;
+            // The scheme requires a memo carrying extra.memo or a random
+            // nonce of >= 16 bytes, hex-encoded. A UUIDv4 simple form is
+            // exactly 16 random bytes as 32 hex chars.
+            let memo = prepared
+                .requirement
+                .memo()
+                .map(str::to_string)
+                .unwrap_or_else(|| Uuid::new_v4().simple().to_string());
 
-    let tx = build_usdc_transfer_tx(rpc, wallet.keypair(), &recipient, amount)
-        .await
-        .map_err(|e| X402Error::SolanaBuild(e.to_string()))?;
-    let encoded_tx =
-        encode_transaction_b64(&tx).map_err(|e| X402Error::Serialize(e.to_string()))?;
+            tracing::info!(
+                authority = %wallet.pubkey_base58(),
+                fee_payer = %fee_payer,
+                recipient = %recipient,
+                amount_base_units = amount,
+                network = %prepared.requirement.network,
+                "signing facilitator-sponsored solana usdc transfer for x402 payment"
+            );
+
+            let tx = build_sponsored_usdc_transfer_tx(
+                rpc,
+                wallet.keypair(),
+                &fee_payer,
+                &recipient,
+                amount,
+                &memo,
+            )
+            .await
+            .map_err(|e| X402Error::SolanaBuild(e.to_string()))?;
+            encode_versioned_transaction_b64(&tx)
+                .map_err(|e| X402Error::Serialize(e.to_string()))?
+        }
+        None => {
+            tracing::info!(
+                payer = %wallet.pubkey_base58(),
+                recipient = %recipient,
+                amount_base_units = amount,
+                network = %prepared.requirement.network,
+                "signing solana usdc transfer for x402 payment (legacy self-relay)"
+            );
+
+            let tx = build_usdc_transfer_tx(rpc, wallet.keypair(), &recipient, amount)
+                .await
+                .map_err(|e| X402Error::SolanaBuild(e.to_string()))?;
+            encode_transaction_b64(&tx).map_err(|e| X402Error::Serialize(e.to_string()))?
+        }
+    };
+
+    let bytes = build_payload_json(prepared, encoded_tx)?;
+    Ok(BASE64.encode(bytes))
+}
+
+/// Serialize the outgoing `X-Payment` payload in the shape the seller's x402
+/// version expects. v2 echoes the chosen requirement under `accepted`; v1
+/// carries `scheme` / `network` at the top level.
+fn build_payload_json(
+    prepared: &PreparedPayment,
+    encoded_tx: String,
+) -> Result<Vec<u8>, X402Error> {
+    if prepared.x402_version >= 2 {
+        let accepted = prepared.raw_requirement.clone().unwrap_or_else(|| {
+            // Fallback: reconstruct the fields we model. Only reachable if the
+            // challenge body wasn't valid JSON, which `prepare` already rejects.
+            serde_json::json!({
+                "scheme": prepared.requirement.scheme,
+                "network": prepared.requirement.network,
+                "amount": prepared.requirement.max_amount_required,
+                "payTo": prepared.requirement.pay_to,
+                "asset": prepared.requirement.asset,
+                "extra": prepared.requirement.extra,
+            })
+        });
+        let payload = serde_json::json!({
+            "x402Version": prepared.x402_version,
+            "accepted": accepted,
+            "payload": { "transaction": encoded_tx },
+        });
+        return serde_json::to_vec(&payload).map_err(|e| X402Error::Serialize(e.to_string()));
+    }
 
     let payload = SolanaPaymentPayload {
         x402_version: prepared.x402_version,
@@ -603,8 +722,7 @@ async fn build_solana_header(
             transaction: encoded_tx,
         },
     };
-    let bytes = serde_json::to_vec(&payload).map_err(|e| X402Error::Serialize(e.to_string()))?;
-    Ok(BASE64.encode(bytes))
+    serde_json::to_vec(&payload).map_err(|e| X402Error::Serialize(e.to_string()))
 }
 
 /// Read a response body with a hard byte cap. `reqwest::Response::text()` and
@@ -764,6 +882,7 @@ mod tests {
                 "solana-mainnet",
             ),
             x402_version: 1,
+            raw_requirement: None,
         };
         // The mismatch check in build_payment_header consults self.mode.
         let configured = NetworkMode::SolanaDevnet.wire_name();
@@ -875,6 +994,7 @@ mod tests {
                 extra: Some(serde_json::json!({ "decimals": 6 })),
             },
             x402_version: 1,
+            raw_requirement: None,
         };
         let encoded = build_sandbox_header(&prepared);
         let decoded = BASE64.decode(&encoded).expect("base64");
@@ -934,6 +1054,88 @@ mod tests {
             canonical_network(&r.network),
             NetworkMode::SolanaDevnet.wire_name()
         );
+    }
+
+    #[test]
+    fn fee_payer_and_memo_accessors() {
+        let mut r = req(
+            crate::solana::USDC_MINT_DEVNET,
+            6,
+            "100000",
+            "solana-devnet",
+        );
+        // Legacy demo seller: no feePayer => legacy self-relay signing path.
+        assert_eq!(r.fee_payer(), None);
+        assert_eq!(r.memo(), None);
+        // Real facilitator seller advertises both.
+        r.extra = Some(serde_json::json!({
+            "decimals": 6,
+            "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd",
+            "memo": "order-4711"
+        }));
+        assert_eq!(
+            r.fee_payer(),
+            Some("EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd")
+        );
+        assert_eq!(r.memo(), Some("order-4711"));
+    }
+
+    #[test]
+    fn v2_payload_echoes_accepted_verbatim() {
+        // v2 payload shape: { x402Version, accepted: <raw requirement>, payload }.
+        // The echo must be the seller's raw JSON so fields we don't model
+        // (here `extensions`) survive the round trip.
+        let raw = serde_json::json!({
+            "scheme": "exact",
+            "network": SOLANA_DEVNET_CAIP2,
+            "amount": "100000",
+            "payTo": "HE5JxfV1VVxrjXNW9ybopevF9uQwyWmJZrYXZxiv7Btv",
+            "asset": crate::solana::USDC_MINT_DEVNET,
+            "extra": { "decimals": 6, "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd" },
+            "extensions": { "somethingWeDoNotModel": true }
+        });
+        let prepared = PreparedPayment {
+            requirement: req(
+                crate::solana::USDC_MINT_DEVNET,
+                6,
+                "100000",
+                SOLANA_DEVNET_CAIP2,
+            ),
+            x402_version: 2,
+            raw_requirement: Some(raw.clone()),
+        };
+        let bytes = build_payload_json(&prepared, "dHhiYXNlNjQ=".to_string()).expect("payload");
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(parsed["x402Version"], 2);
+        assert_eq!(
+            parsed["accepted"], raw,
+            "accepted must echo seller's raw entry"
+        );
+        assert_eq!(parsed["payload"]["transaction"], "dHhiYXNlNjQ=");
+        // v1 top-level scheme/network must NOT be present in a v2 payload.
+        assert!(parsed.get("scheme").is_none());
+        assert!(parsed.get("network").is_none());
+    }
+
+    #[test]
+    fn v1_payload_keeps_legacy_shape() {
+        let prepared = PreparedPayment {
+            requirement: req(
+                crate::solana::USDC_MINT_DEVNET,
+                6,
+                "100000",
+                "solana-devnet",
+            ),
+            x402_version: 1,
+            raw_requirement: None,
+        };
+        let bytes = build_payload_json(&prepared, "dHhiYXNlNjQ=".to_string()).expect("payload");
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(parsed["x402Version"], 1);
+        assert_eq!(parsed["scheme"], "exact");
+        assert_eq!(parsed["network"], "solana-devnet");
+        assert_eq!(parsed["payload"]["transaction"], "dHhiYXNlNjQ=");
+        assert!(parsed.get("accepted").is_none());
     }
 
     #[test]
