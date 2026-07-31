@@ -81,12 +81,10 @@ services:
     container_name: agentspay-paid-endpoint
     restart: unless-stopped
     environment:
-      # Demo x402 seller's receive address. Placeholder devnet pubkey so the
-      # endpoint boots; the live /demo trigger needs this to be a provider
-      # keypair you control AND the shim's devnet wallet funded (faucet step).
-      # Swap for AGENTSPAY_PROVIDER_KEYPAIR:/data/provider-keypair.json once
-      # a real keypair is seeded into the wallet-data volume.
-      AGENTSPAY_DEMO_PAYTO: HE5JxfV1VVxrjXNW9ybopevF9uQwyWmJZrYXZxiv7Btv
+      # Provider keypair seeded into the wallet-data volume (generated on
+      # deploy). The demo seller receives payments here; fund/observe it on
+      # devnet Solscan.
+      AGENTSPAY_PROVIDER_KEYPAIR: /data/provider-keypair.json
     volumes:
       - wallet-data:/data
     networks:
