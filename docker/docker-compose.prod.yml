@@ -13,7 +13,7 @@
 
 services:
   web:
-    image: ghcr.io/h4ckm1n-dev/agentspay-web:v0.3.0
+    image: ghcr.io/h4ckm1n-dev/agentspay-web:v0.3.1
     container_name: agentspay-web
     restart: unless-stopped
     environment:
