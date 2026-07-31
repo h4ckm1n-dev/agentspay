@@ -82,7 +82,7 @@ export default function OpenGraphImage() {
           }}
         >
           One MCP install. Per-call + daily caps before signing. Settles on
-          Solana in ~2 seconds. Open source MIT, security-audited.
+          Solana in ~2 seconds. Open source Apache-2.0, security-audited.
         </div>
       </div>
 
@@ -96,7 +96,9 @@ export default function OpenGraphImage() {
         }}
       >
         <span>github.com/h4ckm1n-dev/agentspay</span>
-        <span style={{ color: "#34d399" }}>agentspay.dev</span>
+        <span style={{ color: "#34d399" }}>
+          {SITE.url.replace(/^https?:\/\//, "")}
+        </span>
       </div>
     </div>,
     { ...size },

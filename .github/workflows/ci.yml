@@ -137,6 +137,8 @@ jobs:
           file: docker/Dockerfile.web
           push: true
           platforms: linux/amd64
+          build-args: |
+            NEXT_PUBLIC_SITE_URL=https://agentspay.sabaidev.la
           tags: |
             ghcr.io/${{ github.repository_owner }}/agentspay-web:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/agentspay-web:latest
