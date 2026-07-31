@@ -1,0 +1,108 @@
+# Production compose for the datacenter (Traefik edge, not Caddy).
+#
+# Traefik terminates TLS and routes:
+#   Host(agentspay.sabaidev.la) && PathPrefix(/api)  -> shim:8080
+#   Host(agentspay.sabaidev.la)                      -> web:3000
+#
+# Only `web` and `shim` join the shared external `proxy` network; redis and
+# the demo paid-endpoint stay on an internal network. Additive: own containers,
+# own internal net — never touches other sites.
+#
+# DNS: agentspay.sabaidev.la must A-record to 103.164.54.215 before `up`, or
+# the Let's Encrypt (letsencrypt/tls-alpn-01) challenge cannot issue.
+
+services:
+  web:
+    image: ghcr.io/h4ckm1n-dev/agentspay-web:v0.3.0
+    container_name: agentspay-web
+    restart: unless-stopped
+    environment:
+      # Client code fetches relative /api/... which Traefik routes straight to
+      # the shim; this only feeds the (bypassed) Next proxy route as a fallback.
+      AGENTSPAY_SHIM_URL: http://shim:8080
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      # Catch-all site router.
+      - traefik.http.routers.agentspay-web.rule=Host(`agentspay.sabaidev.la`)
+      - traefik.http.routers.agentspay-web.entrypoints=websecure
+      - traefik.http.routers.agentspay-web.tls=true
+      - traefik.http.routers.agentspay-web.tls.certresolver=letsencrypt
+      - traefik.http.routers.agentspay-web.priority=1
+      - traefik.http.services.agentspay-web.loadbalancer.server.port=3000
+      # http -> https redirect (unique middleware name).
+      - traefik.http.routers.agentspay-web-http.rule=Host(`agentspay.sabaidev.la`)
+      - traefik.http.routers.agentspay-web-http.entrypoints=web
+      - traefik.http.routers.agentspay-web-http.middlewares=agentspay-redirect
+      - traefik.http.middlewares.agentspay-redirect.redirectscheme.scheme=https
+    depends_on:
+      - shim
+
+  shim:
+    image: ghcr.io/h4ckm1n-dev/agentspay-shim:v0.3.0
+    container_name: agentspay-shim
+    restart: unless-stopped
+    environment:
+      AGENTSPAY_REDIS_URL: redis://redis:6379
+      AGENTSPAY_PAID_ENDPOINT_URL: http://paid-endpoint:3001
+      AGENTSPAY_DEVNET_WALLET_PATH: /data/devnet-wallet.json
+      AGENTSPAY_DEVNET_LEDGER_PATH: /data/devnet-ledger.db
+      # Shim reaches paid-endpoint over the internal net (a private DNS name);
+      # the SSRF guard would otherwise block it. Inherited by the spawned
+      # agentspay-mcp subprocess.
+      AGENTSPAY_ALLOW_PRIVATE_HOSTS: "1"
+      # Origin guard on for prod: only our own frontend may hit mutating endpoints.
+      AGENTSPAY_ALLOWED_ORIGINS: "https://agentspay.sabaidev.la"
+      FORCE_COLOR: "1"
+    volumes:
+      - wallet-data:/data
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      # /api router — higher priority than the catch-all so it wins.
+      - traefik.http.routers.agentspay-api.rule=Host(`agentspay.sabaidev.la`) && PathPrefix(`/api`)
+      - traefik.http.routers.agentspay-api.entrypoints=websecure
+      - traefik.http.routers.agentspay-api.tls=true
+      - traefik.http.routers.agentspay-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.agentspay-api.priority=10
+      - traefik.http.services.agentspay-api.loadbalancer.server.port=8080
+    depends_on:
+      - redis
+      - paid-endpoint
+
+  paid-endpoint:
+    image: ghcr.io/h4ckm1n-dev/agentspay-paid-endpoint:v0.3.0
+    container_name: agentspay-paid-endpoint
+    restart: unless-stopped
+    environment:
+      AGENTSPAY_PROVIDER_KEYPAIR: /data/provider-keypair.json
+    volumes:
+      - wallet-data:/data
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: agentspay-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+  internal:
+    driver: bridge
+
+volumes:
+  wallet-data:
+  redis-data:
