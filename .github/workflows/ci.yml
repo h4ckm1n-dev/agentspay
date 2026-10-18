@@ -182,7 +182,7 @@ jobs:
           docker run --rm --entrypoint node "$IMAGE" -e "const a=require('node:assert/strict');a.equal(require('node:module').createRequire('/app/apps/frontend/server.js')('next/package.json').version,'15.5.28');a.equal(process.getuid(),1000)"
           docker run -d --name security-web -p 127.0.0.1:3000:3000 "$IMAGE"
           trap 'docker logs security-web; docker rm -f security-web' EXIT
-          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:3000/ -o /dev/null
+          curl --fail --retry 20 --retry-all-errors --retry-delay 1 http://127.0.0.1:3000/ -o /dev/null
           for route in docs demo proof robots.txt sitemap.xml; do
             curl --fail --silent --show-error "http://127.0.0.1:3000/$route" -o /dev/null
           done
