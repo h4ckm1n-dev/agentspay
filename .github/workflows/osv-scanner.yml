@@ -1,0 +1,55 @@
+# Dependency (lockfile) vulnerability scan with OSV-Scanner. Report-only: it
+# never blocks a deploy. Trivy scans the running images in the cluster; this
+# catches vulnerable dependencies at the source, where they get fixed.
+# Output: job summary + artifact `osv-results` (JSON: the input for an LLM fix
+# or `osv-scanner fix`). Canonical copy: h4ckm1n-dev/Infra .github/workflows/osv-scanner.yml.
+name: OSV-Scanner
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  schedule:
+    - cron: "17 2 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  osv:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Official image, pinned by digest (tags are mutable). v2.7.0, 2026-10-12.
+      OSV_IMAGE: ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan dependencies
+        run: |
+          rc=0
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/src" -w /src "$OSV_IMAGE" \
+            scan source --format json --output osv-results.json --allow-no-lockfiles -r . || rc=$?
+          # 0 = clean, 1 = vulnerabilities found; anything else is a failed scan.
+          if [ "$rc" -gt 1 ] || [ ! -s osv-results.json ]; then
+            echo "::error::OSV-Scanner failed (exit $rc)"
+            exit 1
+          fi
+          n=$(jq '[.results[]?.packages[]?] | length' osv-results.json)
+          {
+            echo "## OSV-Scanner: $n vulnerable packages"
+            echo
+            if [ "$n" -gt 0 ]; then
+              echo "| Lockfile | Package | Version | Advisories | Max CVSS |"
+              echo "|---|---|---|---|---|"
+              jq -r '.results[]? | (.source.path | sub("^/src/"; "")) as $s | .packages[]? |
+                "| \($s) | \(.package.name) | \(.package.version) | \([.groups[]?.ids[0]] | join(", ")) | \([.groups[]?.max_severity | select(. != "") | tonumber] | max // "?") |"' osv-results.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$n" -eq 0 ] || echo "::warning::OSV-Scanner: $n vulnerable packages (artifact osv-results)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: osv-results
+          path: osv-results.json
+          if-no-files-found: ignore
+          retention-days: 30
